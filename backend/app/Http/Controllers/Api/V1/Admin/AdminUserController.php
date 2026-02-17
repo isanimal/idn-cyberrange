@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1\Admin;
 
+use App\Enums\UserRole;
 use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateUserRequest;
@@ -10,8 +11,8 @@ use App\Models\User;
 use App\Services\Audit\AuditLogService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rules\Password;
+use Illuminate\Http\Response;
+use Illuminate\Validation\Rule;
 
 class AdminUserController extends Controller
 {
@@ -57,6 +58,7 @@ class AdminUserController extends Controller
     {
         $user = User::query()->findOrFail($id);
         $user->status = UserStatus::SUSPENDED;
+        $user->tokens()->delete();
         $user->save();
 
         $this->audit->log('ADMIN_USER_SUSPENDED', auth()->id(), 'User', $user->id);
@@ -64,50 +66,51 @@ class AdminUserController extends Controller
         return response()->json($user);
     }
 
-   public function store(Request $request): JsonResponse
-{
-    $validated = $request->validate([
-        'name' => ['required', 'string', 'max:255'],
-        'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-        'password' => ['required', 'string', Password::min(8)],
-        'role' => ['required', 'in:USER,ADMIN'],
-        'status' => ['nullable', 'in:ACTIVE,SUSPENDED'], // sesuaikan kalau enum kamu beda
-    ]);
+    public function store(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:8'],
+            'role' => ['required', Rule::in([UserRole::ADMIN->value, UserRole::USER->value])],
+        ]);
 
-    $user = User::query()->create([
-        'name' => $validated['name'],
-        'email' => $validated['email'],
-        'password' => Hash::make($validated['password']),
-        'role' => $validated['role'],
-        'status' => $validated['status'] ?? UserStatus::ACTIVE,
-    ]);
+        $user = User::query()->create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => $validated['password'],
+            'role' => UserRole::from($validated['role']),
+            'status' => UserStatus::ACTIVE,
+        ]);
 
-    $this->audit->log('ADMIN_USER_CREATED', auth()->id(), 'User', $user->id, [
-        'email' => $user->email,
-        'role' => $user->role,
-        'status' => (string) $user->status,
-    ]);
+        $this->audit->log('ADMIN_USER_CREATED', auth()->id(), 'User', $user->id, [
+            'email' => $user->email,
+            'role' => $user->role?->value,
+            'status' => $user->status?->value,
+        ]);
 
-    return response()->json($user, 201);
-}
-
-public function destroy(string $id): JsonResponse
-{
-    $user = User::query()->findOrFail($id);
-
-    // proteksi sederhana: admin tidak bisa hapus dirinya sendiri
-    if ((string) auth()->id() === (string) $user->id) {
-        return response()->json(['message' => 'You cannot delete your own account.'], 422);
+        return response()->json($user, Response::HTTP_CREATED);
     }
 
-    $this->audit->log('ADMIN_USER_DELETED', auth()->id(), 'User', $user->id, [
-        'email' => $user->email,
-        'role' => $user->role,
-    ]);
+    public function destroy(string $id): JsonResponse
+    {
+        $user = User::query()->findOrFail($id);
 
-    $user->delete();
+        if ((string) auth()->id() === (string) $user->id) {
+            return response()->json(['message' => 'You cannot delete your own account.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
-    return response()->json(['message' => 'User deleted.']);
-}
+        $user->tokens()->delete();
+        $user->status = UserStatus::SUSPENDED;
+        $user->save();
+
+        $this->audit->log('ADMIN_USER_DELETED', auth()->id(), 'User', $user->id, [
+            'email' => $user->email,
+            'role' => $user->role?->value,
+            'status' => $user->status?->value,
+        ]);
+
+        return response()->json(null, Response::HTTP_NO_CONTENT);
+    }
 
 }

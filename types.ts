@@ -3,11 +3,19 @@ export enum UserRole {
   ADMIN = 'ADMIN'
 }
 
+export enum UserStatus {
+  ACTIVE = 'ACTIVE',
+  SUSPENDED = 'SUSPENDED'
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
   role: UserRole;
+  status: UserStatus;
+  created_at?: string;
+  updated_at?: string;
   points: number;
   completedModules: number;
   rank: string;

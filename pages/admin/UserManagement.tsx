@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import Card from '../../components/UI/Card';
 import { UserRole } from '../../types';
 import { UserPlus, Trash2, Shield, User, X } from 'lucide-react';
 
 const UserManagement: React.FC = () => {
-  const { getAllUsers, registerUser, deleteUser, user: currentUser } = useAuth();
+  const { getAllUsers, fetchUsers, registerUser, deleteUser, user: currentUser } = useAuth();
   const users = getAllUsers();
   
   const [showModal, setShowModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -16,11 +19,52 @@ const UserManagement: React.FC = () => {
     role: UserRole.USER
   });
 
+  const loadUsers = async () => {
+    setIsLoading(true);
+    setError('');
+
+    try {
+      await fetchUsers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load users.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadUsers();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await registerUser(formData);
-    setShowModal(false);
-    setFormData({ name: '', email: '', password: '', role: UserRole.USER });
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      await registerUser(formData);
+      setShowModal(false);
+      setFormData({ name: '', email: '', password: '', role: UserRole.USER });
+      await loadUsers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create user.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      await deleteUser(id);
+      await loadUsers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to revoke access.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -32,11 +76,18 @@ const UserManagement: React.FC = () => {
         </div>
         <button 
           onClick={() => setShowModal(true)}
+          disabled={isSubmitting}
           className="bg-idn-500 hover:bg-idn-600 text-white font-bold px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-colors"
         >
           <UserPlus size={18} /> Register New User
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 text-red-600 border border-red-100 px-4 py-3 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
 
       <Card className="overflow-hidden p-0">
         <div className="overflow-x-auto">
@@ -50,7 +101,11 @@ const UserManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {users.map((u) => (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-6 text-sm text-slate-500">Loading users...</td>
+                </tr>
+              ) : users.map((u) => (
                 <tr key={u.id} className="bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -76,7 +131,8 @@ const UserManagement: React.FC = () => {
                   <td className="px-6 py-4 text-right">
                     {u.id !== currentUser?.id && (
                       <button 
-                        onClick={() => deleteUser(u.id)}
+                        onClick={() => void handleDelete(u.id)}
+                        disabled={isSubmitting}
                         className="p-2 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors"
                         title="Revoke Access"
                       >
@@ -166,7 +222,7 @@ const UserManagement: React.FC = () => {
 
               <div className="pt-4">
                 <button type="submit" className="w-full bg-idn-500 text-white font-bold py-3 rounded-lg hover:bg-idn-600 transition-colors shadow-lg shadow-idn-500/20">
-                  Create Account
+                  {isSubmitting ? 'Processing...' : 'Create Account'}
                 </button>
               </div>
             </form>

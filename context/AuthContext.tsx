@@ -1,99 +1,155 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, UserRole } from '../types';
-import { MOCK_USERS_DB } from '../constants';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { User, UserRole, UserStatus } from '../types';
+import { apiClient } from '../services/apiClient';
+
+interface BackendUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  status: UserStatus;
+  created_at?: string;
+  updated_at?: string;
+}
 
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   isLoading: boolean;
-  // Admin Only Functions
-  registerUser: (newUser: Partial<User> & { password: string }) => Promise<void>;
+  registerUser: (newUser: { name: string; email: string; password: string; role: UserRole }) => Promise<void>;
   getAllUsers: () => User[];
-  deleteUser: (id: string) => void;
+  fetchUsers: () => Promise<User[]>;
+  deleteUser: (id: string) => Promise<void>;
+  refreshMe: () => Promise<void>;
+}
+
+interface AuthResponse {
+  token: string;
+  token_type: string;
+  user: BackendUser;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const toDataAvatar = (email: string, name: string): string => {
+  const initial = (name?.trim()?.[0] ?? email?.[0] ?? 'U').toUpperCase();
+  const bg = '#0ea5e9';
+  const fg = '#ffffff';
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' fill='${bg}'/><text x='50%' y='54%' dominant-baseline='middle' text-anchor='middle' fill='${fg}' font-family='Arial, sans-serif' font-size='28'>${initial}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
+
+const toViewUser = (backendUser: BackendUser): User => ({
+  ...backendUser,
+  points: 0,
+  completedModules: 0,
+  rank: backendUser.role === UserRole.ADMIN ? 'Administrator' : 'Member',
+  avatarUrl: toDataAvatar(backendUser.email, backendUser.name),
+});
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
-  // Local state to simulate database persistence during session
-  const [usersDb, setUsersDb] = useState<any[]>(() => {
-    const saved = localStorage.getItem('mock_users_db');
-    return saved ? JSON.parse(saved) : MOCK_USERS_DB;
-  });
+
+  const forceLocalLogout = () => {
+    apiClient.clearAuthToken();
+    setUser(null);
+    setUsers([]);
+  };
 
   useEffect(() => {
-    // Check local storage for active session
-    const storedUser = localStorage.getItem('active_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    apiClient.setUnauthorizedHandler(forceLocalLogout);
+
+    return () => {
+      apiClient.setUnauthorizedHandler(null);
+    };
   }, []);
 
-  // Sync DB changes to local storage
+  const refreshMe = async (): Promise<void> => {
+    const me = await apiClient.get<BackendUser>('/api/v1/me');
+    setUser(toViewUser(me));
+  };
+
   useEffect(() => {
-    localStorage.setItem('mock_users_db', JSON.stringify(usersDb));
-  }, [usersDb]);
+    const bootstrap = async () => {
+      const token = apiClient.getAuthToken();
+
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        await refreshMe();
+      } catch {
+        forceLocalLogout();
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void bootstrap();
+  }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    const foundUser = usersDb.find(u => u.email === email && u.password === password);
-    
-    if (foundUser) {
-      // Create a "clean" user object without the password field for state
-      const { password: _, ...cleanUser } = foundUser;
-      setUser(cleanUser as User);
-      localStorage.setItem('active_user', JSON.stringify(cleanUser));
-      setIsLoading(false);
+
+    try {
+      const payload = await apiClient.post<AuthResponse>('/api/v1/login', {
+        email,
+        password,
+        device_name: 'idn-web',
+      });
+
+      apiClient.setAuthToken(payload.token);
+      setUser(toViewUser(payload.user));
       return true;
+    } catch {
+      forceLocalLogout();
+      return false;
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
-    return false;
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('active_user');
+  const logout = (): void => {
+    void apiClient.post<{ message: string }>('/api/v1/logout').catch(() => undefined);
+    forceLocalLogout();
   };
 
-  // ADMIN ONLY: Register new user
-  const registerUser = async (newUser: Partial<User> & { password: string }) => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const id = 'u' + (usersDb.length + 1) + Date.now();
-    const userEntry = {
-      id,
-      points: 0,
-      completedModules: 0,
-      rank: 'Newbie',
-      avatarUrl: `https://ui-avatars.com/api/?name=${newUser.name}&background=0ea5e9&color=fff`,
-      ...newUser
-    };
-    
-    setUsersDb([...usersDb, userEntry]);
+  const fetchUsers = async (): Promise<User[]> => {
+    const response = await apiClient.get<{ data: BackendUser[]; meta: Record<string, unknown> }>('/api/v1/admin/users');
+    const mapped = response.data.map(toViewUser);
+    setUsers(mapped);
+    return mapped;
   };
 
-  const getAllUsers = () => {
-    return usersDb.map(({ password, ...u }) => u as User);
+  const registerUser = async (newUser: { name: string; email: string; password: string; role: UserRole }): Promise<void> => {
+    await apiClient.post<BackendUser>('/api/v1/admin/users', newUser);
   };
 
-  const deleteUser = (id: string) => {
-    setUsersDb(usersDb.filter(u => u.id !== id));
+  const deleteUser = async (id: string): Promise<void> => {
+    await apiClient.delete<void>(`/api/v1/admin/users/${id}`);
   };
 
-  return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading, registerUser, getAllUsers, deleteUser }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo<AuthContextType>(
+    () => ({
+      user,
+      login,
+      logout,
+      isLoading,
+      registerUser,
+      getAllUsers: () => users,
+      fetchUsers,
+      deleteUser,
+      refreshMe,
+    }),
+    [user, isLoading, users],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {

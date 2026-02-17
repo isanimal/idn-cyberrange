@@ -48,11 +48,11 @@ Route::prefix('v1')->group(function (): void {
             Route::patch('/challenges/{id}', [AdminChallengeController::class, 'update']);
             Route::delete('/challenges/{id}', [AdminChallengeController::class, 'destroy']);
 
-	    Route::get('/users', [AdminUserController::class, 'index']);
-            Route::post('/users', [AdminUserController::class, 'store']);           // NEW
+            Route::get('/users', [AdminUserController::class, 'index']);
+            Route::post('/users', [AdminUserController::class, 'store']);
             Route::patch('/users/{id}', [AdminUserController::class, 'update']);
-            Route::patch('/users/{id}/suspend', [AdminUserController::class, 'suspend']); // backward compatible
-            Route::delete('/users/{id}', [AdminUserController::class, 'destroy']);   // NEW
+            Route::patch('/users/{id}/suspend', [AdminUserController::class, 'suspend']);
+            Route::delete('/users/{id}', [AdminUserController::class, 'destroy']);
 
 
             Route::get('/orchestration/instances', [AdminOrchestrationController::class, 'index']);
