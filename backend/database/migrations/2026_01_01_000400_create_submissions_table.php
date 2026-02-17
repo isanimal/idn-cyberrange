@@ -1,0 +1,27 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
+    public function up(): void
+    {
+        Schema::create('submissions', function (Blueprint $table): void {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('user_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignUuid('challenge_id')->constrained('challenges')->cascadeOnDelete();
+            $table->string('submitted_hash');
+            $table->enum('result', ['CORRECT', 'WRONG']);
+            $table->unsignedInteger('attempt_no');
+            $table->timestamp('submitted_at');
+
+            $table->index(['user_id', 'challenge_id', 'submitted_at']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('submissions');
+    }
+};

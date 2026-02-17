@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IDN CyberRange</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
+            },
+            colors: {
+              // IDN Brand Red
+              idn: {
+                50: '#fef2f2',
+                100: '#fee2e2',
+                500: '#D61F26', // Primary Brand Color
+                600: '#b91c1c',
+                700: '#991b1b',
+              },
+              // Remap 'cyber' to be compatible with old code but cleaner
+              cyber: {
+                900: '#0f172a', // Keep for dark mode backgrounds
+                800: '#1e293b',
+                700: '#334155',
+                500: '#D61F26', // IDN Red
+                400: '#ef4444', 
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        @apply bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-200 transition-colors duration-200;
+      }
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        @apply bg-slate-100 dark:bg-slate-900;
+      }
+      ::-webkit-scrollbar-thumb {
+        @apply bg-slate-300 dark:bg-slate-700 rounded-full;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        @apply bg-slate-400 dark:bg-slate-600;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://esm.sh/lucide-react@^0.564.0",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "recharts": "https://esm.sh/recharts@^3.7.0",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
+    "react-markdown": "https://esm.sh/react-markdown@^10.1.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

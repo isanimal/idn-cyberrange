@@ -1,0 +1,180 @@
+import React, { useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
+import Card from '../../components/UI/Card';
+import { UserRole } from '../../types';
+import { UserPlus, Trash2, Shield, User, X } from 'lucide-react';
+
+const UserManagement: React.FC = () => {
+  const { getAllUsers, registerUser, deleteUser, user: currentUser } = useAuth();
+  const users = getAllUsers();
+  
+  const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: UserRole.USER
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await registerUser(formData);
+    setShowModal(false);
+    setFormData({ name: '', email: '', password: '', role: UserRole.USER });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-white">User Management</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm">Create and manage platform access.</p>
+        </div>
+        <button 
+          onClick={() => setShowModal(true)}
+          className="bg-idn-500 hover:bg-idn-600 text-white font-bold px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-colors"
+        >
+          <UserPlus size={18} /> Register New User
+        </button>
+      </div>
+
+      <Card className="overflow-hidden p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold">
+                <th className="px-6 py-4">User</th>
+                <th className="px-6 py-4">Role</th>
+                <th className="px-6 py-4">Progress</th>
+                <th className="px-6 py-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+              {users.map((u) => (
+                <tr key={u.id} className="bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <img src={u.avatarUrl} alt="" className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700" />
+                      <div>
+                        <div className="font-bold text-slate-800 dark:text-white">{u.name}</div>
+                        <div className="text-xs text-slate-500">{u.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 rounded text-xs font-bold border ${
+                      u.role === UserRole.ADMIN 
+                        ? 'bg-purple-100 text-purple-600 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800' 
+                        : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                    }`}>
+                      {u.role}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
+                    <span className="font-medium text-slate-800 dark:text-white">{u.points}</span> PTS / {u.completedModules} Modules
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    {u.id !== currentUser?.id && (
+                      <button 
+                        onClick={() => deleteUser(u.id)}
+                        className="p-2 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors"
+                        title="Revoke Access"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Registration Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl w-full max-w-md shadow-2xl transition-colors">
+            <div className="flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-700">
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white">Register New User</h3>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1">Full Name</label>
+                <input 
+                  type="text" 
+                  required
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-slate-800 dark:text-white focus:border-idn-500 outline-none"
+                  value={formData.name}
+                  onChange={e => setFormData({...formData, name: e.target.value})}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1">Email Address</label>
+                <input 
+                  type="email" 
+                  required
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-slate-800 dark:text-white focus:border-idn-500 outline-none"
+                  value={formData.email}
+                  onChange={e => setFormData({...formData, email: e.target.value})}
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1">Temporary Password</label>
+                <input 
+                  type="text" 
+                  required
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-slate-800 dark:text-white focus:border-idn-500 outline-none font-mono"
+                  value={formData.password}
+                  onChange={e => setFormData({...formData, password: e.target.value})}
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1">Role</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({...formData, role: UserRole.USER})}
+                    className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border transition-all ${
+                      formData.role === UserRole.USER 
+                      ? 'bg-idn-50 border-idn-500 text-idn-600 dark:bg-idn-900/30 dark:text-idn-400' 
+                      : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400'
+                    }`}
+                  >
+                    <User size={16} /> User
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({...formData, role: UserRole.ADMIN})}
+                    className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border transition-all ${
+                      formData.role === UserRole.ADMIN 
+                      ? 'bg-purple-50 border-purple-500 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400' 
+                      : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400'
+                    }`}
+                  >
+                    <Shield size={16} /> Admin
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-4">
+                <button type="submit" className="w-full bg-idn-500 text-white font-bold py-3 rounded-lg hover:bg-idn-600 transition-colors shadow-lg shadow-idn-500/20">
+                  Create Account
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default UserManagement;
