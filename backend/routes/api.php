@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Admin\AdminChallengeController;
+use App\Http\Controllers\Api\V1\Admin\DashboardController;
 use App\Http\Controllers\Api\V1\Admin\AdminLabController;
 use App\Http\Controllers\Api\V1\Admin\AdminModuleController;
 use App\Http\Controllers\Api\V1\Admin\AdminOrchestrationController;
@@ -39,6 +40,7 @@ Route::prefix('v1')->group(function (): void {
             ->middleware('throttle:challenge-submission');
 
         Route::prefix('admin')->middleware('role:ADMIN')->group(function (): void {
+            Route::get('/dashboard/overview', [DashboardController::class, 'overview']);
             Route::get('/labs', [AdminLabController::class, 'index']);
             Route::post('/labs', [AdminLabController::class, 'store']);
             Route::get('/labs/{id}', [AdminLabController::class, 'show']);

@@ -139,3 +139,29 @@ export interface AdminLesson {
   created_at?: string;
   updated_at?: string;
 }
+
+export interface AdminDashboardMetrics {
+  totalUsers: number;
+  activeLabInstances: number;
+  submissions24h: number;
+  failedJobs: number;
+}
+
+export interface AdminDashboardSubmissionPoint {
+  date: string;
+  count: number;
+}
+
+export interface AdminDashboardAuditLog {
+  id: string | number;
+  tag: string;
+  message: string;
+  createdAt: string | null;
+  timeAgo?: string | null;
+}
+
+export interface AdminDashboardOverview {
+  metrics: AdminDashboardMetrics;
+  flagSubmissionsLast7Days: AdminDashboardSubmissionPoint[];
+  recentAuditLogs: AdminDashboardAuditLog[];
+}

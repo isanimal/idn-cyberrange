@@ -7,6 +7,7 @@ use App\Enums\ModuleStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Lesson;
 use App\Models\Module;
+use App\Services\Audit\AuditLogService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -14,6 +15,10 @@ use Illuminate\Validation\Rule;
 
 class AdminModuleController extends Controller
 {
+    public function __construct(private readonly AuditLogService $audit)
+    {
+    }
+
     public function index(): JsonResponse
     {
         $modules = Module::query()
@@ -38,6 +43,10 @@ class AdminModuleController extends Controller
         ]);
 
         $module = Module::query()->create($validated)->loadCount('lessons');
+
+        $this->audit->log('MODULE_CREATED', auth()->id(), 'module', $module->id, [
+            'message' => 'Created module "'.$module->title.'"',
+        ]);
 
         return response()->json($this->transformModule($module), Response::HTTP_CREATED);
     }
@@ -65,13 +74,22 @@ class AdminModuleController extends Controller
         $module->fill($validated);
         $module->save();
 
+        $this->audit->log('MODULE_UPDATED', auth()->id(), 'module', $module->id, [
+            'message' => 'Updated module "'.$module->title.'"',
+        ]);
+
         return response()->json($this->transformModule($module->loadCount('lessons')));
     }
 
     public function destroy(string $id): JsonResponse
     {
         $module = Module::query()->findOrFail($id);
+        $title = $module->title;
         $module->delete();
+
+        $this->audit->log('MODULE_DELETED', auth()->id(), 'module', $id, [
+            'message' => 'Deleted module "'.$title.'"',
+        ]);
 
         return response()->json(null, Response::HTTP_NO_CONTENT);
     }
