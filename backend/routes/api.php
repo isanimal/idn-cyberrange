@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\LabInstanceController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
+    Route::get('/ping', fn() => response()->json(['ok' => true]));
     Route::post('/login', [AuthController::class, 'login']);
     Route::post('/register', [AuthController::class, 'register']);
 
@@ -47,9 +48,12 @@ Route::prefix('v1')->group(function (): void {
             Route::patch('/challenges/{id}', [AdminChallengeController::class, 'update']);
             Route::delete('/challenges/{id}', [AdminChallengeController::class, 'destroy']);
 
-            Route::get('/users', [AdminUserController::class, 'index']);
+	    Route::get('/users', [AdminUserController::class, 'index']);
+            Route::post('/users', [AdminUserController::class, 'store']);           // NEW
             Route::patch('/users/{id}', [AdminUserController::class, 'update']);
             Route::patch('/users/{id}/suspend', [AdminUserController::class, 'suspend']); // backward compatible
+            Route::delete('/users/{id}', [AdminUserController::class, 'destroy']);   // NEW
+
 
             Route::get('/orchestration/instances', [AdminOrchestrationController::class, 'index']);
             Route::post('/orchestration/instances/{instance_id}/force-stop', [AdminOrchestrationController::class, 'forceStop']);

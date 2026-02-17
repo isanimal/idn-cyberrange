@@ -6,15 +6,18 @@ use Illuminate\Support\Str;
 
 trait UsesUuid
 {
-    public $incrementing = false;
-    protected $keyType = 'string';
-
-    protected static function bootUsesUuid(): void
+    public static function bootUsesUuid(): void
     {
-        static::creating(function ($model): void {
+        static::creating(function ($model) {
             if (! $model->getKey()) {
                 $model->{$model->getKeyName()} = (string) Str::uuid();
             }
         });
+    }
+
+    public function initializeUsesUuid(): void
+    {
+        $this->keyType = 'string';
+        $this->incrementing = false;
     }
 }

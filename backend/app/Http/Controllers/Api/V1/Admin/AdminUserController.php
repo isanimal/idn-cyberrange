@@ -9,6 +9,9 @@ use App\Models\LabInstance;
 use App\Models\User;
 use App\Services\Audit\AuditLogService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
 
 class AdminUserController extends Controller
 {
@@ -60,4 +63,51 @@ class AdminUserController extends Controller
 
         return response()->json($user);
     }
+
+   public function store(Request $request): JsonResponse
+{
+    $validated = $request->validate([
+        'name' => ['required', 'string', 'max:255'],
+        'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+        'password' => ['required', 'string', Password::min(8)],
+        'role' => ['required', 'in:USER,ADMIN'],
+        'status' => ['nullable', 'in:ACTIVE,SUSPENDED'], // sesuaikan kalau enum kamu beda
+    ]);
+
+    $user = User::query()->create([
+        'name' => $validated['name'],
+        'email' => $validated['email'],
+        'password' => Hash::make($validated['password']),
+        'role' => $validated['role'],
+        'status' => $validated['status'] ?? UserStatus::ACTIVE,
+    ]);
+
+    $this->audit->log('ADMIN_USER_CREATED', auth()->id(), 'User', $user->id, [
+        'email' => $user->email,
+        'role' => $user->role,
+        'status' => (string) $user->status,
+    ]);
+
+    return response()->json($user, 201);
+}
+
+public function destroy(string $id): JsonResponse
+{
+    $user = User::query()->findOrFail($id);
+
+    // proteksi sederhana: admin tidak bisa hapus dirinya sendiri
+    if ((string) auth()->id() === (string) $user->id) {
+        return response()->json(['message' => 'You cannot delete your own account.'], 422);
+    }
+
+    $this->audit->log('ADMIN_USER_DELETED', auth()->id(), 'User', $user->id, [
+        'email' => $user->email,
+        'role' => $user->role,
+    ]);
+
+    $user->delete();
+
+    return response()->json(['message' => 'User deleted.']);
+}
+
 }
