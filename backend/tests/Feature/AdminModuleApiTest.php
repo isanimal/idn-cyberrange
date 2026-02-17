@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Enums\UserRole;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
 class AdminModuleApiTest extends TestCase
@@ -65,5 +67,47 @@ class AdminModuleApiTest extends TestCase
                 'order_index' => 99,
             ])
             ->assertForbidden();
+    }
+
+    public function test_admin_can_upload_lesson_asset_file(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::ADMIN]);
+
+        $createModule = $this->actingAs($admin, 'sanctum')->postJson('/api/v1/admin/modules', [
+            'title' => 'M8: Asset Upload',
+            'slug' => 'asset-upload',
+            'difficulty' => 'BASIC',
+            'order_index' => 8,
+        ]);
+
+        $moduleId = $createModule->json('id');
+        $lesson = $this->actingAs($admin, 'sanctum')->postJson('/api/v1/admin/modules/'.$moduleId.'/lessons', [
+            'title' => 'Images',
+            'content_md' => 'Asset test',
+            'order' => 1,
+        ]);
+
+        $lessonId = $lesson->json('id');
+        $file = UploadedFile::fake()->image('diagram.png', 640, 480);
+
+        $upload = $this->actingAs($admin, 'sanctum')->post('/api/v1/admin/lessons/'.$lessonId.'/assets', [
+            'type' => 'IMAGE',
+            'caption' => 'Diagram',
+            'order_index' => 1,
+            'file' => $file,
+        ]);
+
+        $upload->assertCreated()
+            ->assertJsonPath('data.type', 'IMAGE')
+            ->assertJsonPath('data.caption', 'Diagram');
+
+        $url = (string) $upload->json('data.url');
+        $this->assertStringStartsWith('/uploads/lessons/', $url);
+        $this->assertTrue(File::exists(public_path(ltrim($url, '/'))));
+
+        $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/v1/admin/modules/'.$moduleId.'/lessons/'.$lessonId)
+            ->assertOk()
+            ->assertJsonPath('data.assets.0.url', $url);
     }
 }

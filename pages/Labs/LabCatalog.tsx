@@ -38,6 +38,7 @@ const LabCatalog: React.FC = () => {
   };
 
   const envRows = maskEnv((instanceModal?.runtime_metadata as Record<string, unknown> | undefined));
+  const logsTail = String((instanceModal?.runtime_metadata as Record<string, unknown> | undefined)?.logs_tail ?? '').trim();
 
   return (
     <div className="space-y-6">
@@ -143,8 +144,10 @@ const LabCatalog: React.FC = () => {
               )}
 
               {activeTab === 'logs' && (
-                <div className="bg-slate-950 text-slate-200 rounded-lg p-3 font-mono text-xs">
-                  <Terminal size={14} className="inline mr-2" /> Logs endpoint not implemented yet. (placeholder)
+                <div className="bg-slate-950 text-slate-200 rounded-lg p-3 font-mono text-xs whitespace-pre-wrap break-words">
+                  {logsTail || instanceModal.last_error || (
+                    <><Terminal size={14} className="inline mr-2" />Logs are not available yet.</>
+                  )}
                 </div>
               )}
 

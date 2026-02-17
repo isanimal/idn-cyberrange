@@ -16,6 +16,8 @@ use App\Services\Audit\AuditLogService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
 class AdminModuleController extends Controller
@@ -373,15 +375,18 @@ class AdminModuleController extends Controller
         $lesson = Lesson::query()->findOrFail($lessonId);
         $validated = $request->validate([
             'type' => ['nullable', 'string', 'in:IMAGE'],
-            'url' => ['required', 'url', 'max:2048'],
+            'url' => ['nullable', 'url', 'max:2048', 'required_without:file'],
+            'file' => ['nullable', 'file', 'image', 'max:5120', 'required_without:url'],
             'caption' => ['nullable', 'string', 'max:255'],
             'order_index' => ['required', 'integer', 'min:1'],
         ]);
 
+        $resolvedUrl = $this->resolveAssetUrl($request->file('file'), $validated['url'] ?? null);
+
         $asset = LessonAsset::query()->create([
             'lesson_id' => $lesson->id,
             'type' => strtoupper((string) ($validated['type'] ?? 'IMAGE')),
-            'url' => $validated['url'],
+            'url' => $resolvedUrl,
             'caption' => $validated['caption'] ?? null,
             'order_index' => (int) $validated['order_index'],
         ]);
@@ -410,12 +415,18 @@ class AdminModuleController extends Controller
         $validated = $request->validate([
             'type' => ['sometimes', 'string', 'in:IMAGE'],
             'url' => ['sometimes', 'url', 'max:2048'],
+            'file' => ['sometimes', 'file', 'image', 'max:5120'],
             'caption' => ['nullable', 'string', 'max:255'],
             'order_index' => ['sometimes', 'integer', 'min:1'],
         ]);
 
         if (array_key_exists('type', $validated)) {
             $validated['type'] = strtoupper((string) $validated['type']);
+        }
+
+        if ($request->hasFile('file')) {
+            $this->deleteAssetFileIfLocal($asset->url);
+            $validated['url'] = $this->resolveAssetUrl($request->file('file'), null);
         }
 
         $asset->fill($validated);
@@ -442,6 +453,7 @@ class AdminModuleController extends Controller
     public function destroyAsset(Request $request, string $assetId): JsonResponse
     {
         $asset = LessonAsset::query()->findOrFail($assetId);
+        $this->deleteAssetFileIfLocal($asset->url);
         $asset->delete();
 
         $this->audit->log('LESSON_ASSET_DELETED', (string) $request->user()?->id, 'lesson_asset', $assetId, [
@@ -645,5 +657,32 @@ class AdminModuleController extends Controller
         }
 
         return strtolower((string) $module->status) === 'draft' ? 'DRAFT' : 'PUBLISHED';
+    }
+
+    private function resolveAssetUrl(?UploadedFile $file, ?string $url): string
+    {
+        if ($file) {
+            $directory = public_path('uploads/lessons');
+            File::ensureDirectoryExists($directory);
+
+            $name = Str::uuid()->toString().'.'.$file->getClientOriginalExtension();
+            $file->move($directory, $name);
+
+            return '/uploads/lessons/'.$name;
+        }
+
+        return (string) $url;
+    }
+
+    private function deleteAssetFileIfLocal(?string $url): void
+    {
+        if (! is_string($url) || ! str_starts_with($url, '/uploads/lessons/')) {
+            return;
+        }
+
+        $path = public_path(ltrim($url, '/'));
+        if (File::exists($path)) {
+            File::delete($path);
+        }
     }
 }

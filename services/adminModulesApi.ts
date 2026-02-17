@@ -52,6 +52,13 @@ export interface AdminLessonAssetPayload {
   order_index: number;
 }
 
+export interface AdminLessonAssetUploadPayload {
+  type?: 'IMAGE';
+  file: File;
+  caption?: string;
+  order_index: number;
+}
+
 const toDifficulty = (level: AdminModuleLevel): 'BASIC' | 'INTERMEDIATE' | 'ADVANCED' =>
   level === 'basic' ? 'BASIC' : level === 'intermediate' ? 'INTERMEDIATE' : 'ADVANCED';
 
@@ -159,7 +166,19 @@ export const adminModulesApi = {
   createAsset: (lessonId: string, payload: AdminLessonAssetPayload): Promise<{ data: { id: string } }> =>
     apiClient.post<{ data: { id: string } }>(`/api/v1/admin/lessons/${lessonId}/assets`, payload),
 
-  updateAsset: (assetId: string, payload: Partial<AdminLessonAssetPayload>): Promise<{ data: { id: string } }> =>
+  uploadAsset: (lessonId: string, payload: AdminLessonAssetUploadPayload): Promise<{ data: { id: string } }> => {
+    const form = new FormData();
+    form.append('file', payload.file);
+    form.append('order_index', String(payload.order_index));
+    if (payload.caption) {
+      form.append('caption', payload.caption);
+    }
+    form.append('type', payload.type ?? 'IMAGE');
+
+    return apiClient.post<{ data: { id: string } }>(`/api/v1/admin/lessons/${lessonId}/assets`, form);
+  },
+
+  updateAsset: (assetId: string, payload: Partial<AdminLessonAssetPayload> | FormData): Promise<{ data: { id: string } }> =>
     apiClient.patch<{ data: { id: string } }>(`/api/v1/admin/assets/${assetId}`, payload),
 
   removeAsset: (assetId: string): Promise<void> =>

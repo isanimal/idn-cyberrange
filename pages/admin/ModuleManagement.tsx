@@ -40,6 +40,7 @@ const ModuleManagement: React.FC = () => {
     caption: '',
     order_index: 1,
   });
+  const [assetFile, setAssetFile] = useState<File | null>(null);
   const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
@@ -242,6 +243,7 @@ const ModuleManagement: React.FC = () => {
         caption: '',
         order_index: (detail.assets?.length ?? 0) + 1,
       });
+      setAssetFile(null);
       setEditingTaskId(null);
       setEditingAssetId(null);
     } catch (err) {
@@ -327,6 +329,10 @@ const ModuleManagement: React.FC = () => {
   const handleSaveAsset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingLesson) return;
+    if (!assetFile && !assetFormData.url.trim()) {
+      setError('Provide an image URL or choose a file.');
+      return;
+    }
 
     setError('');
     setIsSubmitting(true);
@@ -337,12 +343,29 @@ const ModuleManagement: React.FC = () => {
         caption: assetFormData.caption || undefined,
         order_index: assetFormData.order_index,
       };
-      if (editingAssetId) {
+      if (editingAssetId && assetFile) {
+        const updateForm = new FormData();
+        updateForm.append('file', assetFile);
+        updateForm.append('type', 'IMAGE');
+        updateForm.append('order_index', String(assetFormData.order_index));
+        if (assetFormData.caption) {
+          updateForm.append('caption', assetFormData.caption);
+        }
+        await adminModulesApi.updateAsset(editingAssetId, updateForm);
+      } else if (editingAssetId) {
         await adminModulesApi.updateAsset(editingAssetId, payload);
+      } else if (assetFile) {
+        await adminModulesApi.uploadAsset(editingLesson.id, {
+          type: 'IMAGE',
+          file: assetFile,
+          caption: assetFormData.caption || undefined,
+          order_index: assetFormData.order_index,
+        });
       } else {
         await adminModulesApi.createAsset(editingLesson.id, payload);
       }
       setAssetFormData({ url: '', caption: '', order_index: (editingLesson.assets?.length ?? 0) + 1 });
+      setAssetFile(null);
       setEditingAssetId(null);
       await refreshEditingLesson();
     } catch (err) {
@@ -813,10 +836,9 @@ const ModuleManagement: React.FC = () => {
                           <form id="assetForm" onSubmit={(e) => void handleSaveAsset(e)} className="grid grid-cols-12 gap-3">
                             <input
                               className="col-span-7 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-sm text-slate-800 dark:text-white"
-                              placeholder="Image URL"
+                              placeholder="Image URL (optional if upload file)"
                               value={assetFormData.url}
                               onChange={(e) => setAssetFormData({ ...assetFormData, url: e.target.value })}
-                              required
                             />
                             <input
                               className="col-span-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-sm text-slate-800 dark:text-white"
@@ -832,6 +854,20 @@ const ModuleManagement: React.FC = () => {
                               onChange={(e) => setAssetFormData({ ...assetFormData, order_index: Number(e.target.value) || 1 })}
                               required
                             />
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="col-span-12 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-sm text-slate-700 dark:text-slate-300"
+                              onChange={(e) => {
+                                setAssetFile(e.target.files?.[0] ?? null);
+                                if (e.target.files?.[0]) {
+                                  setAssetFormData((prev) => ({ ...prev, url: '' }));
+                                }
+                              }}
+                            />
+                            <div className="col-span-12 text-xs text-slate-500 dark:text-slate-400">
+                              Use either image URL or upload file.
+                            </div>
                             <button className="col-span-12 bg-idn-500 text-white text-sm rounded-lg font-semibold py-2">
                               {editingAssetId ? 'Update Asset' : 'Add Asset'}
                             </button>
@@ -855,6 +891,7 @@ const ModuleManagement: React.FC = () => {
                                           caption: asset.caption ?? '',
                                           order_index: asset.order_index,
                                         });
+                                        setAssetFile(null);
                                       }}
                                       className="text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-900"
                                     >

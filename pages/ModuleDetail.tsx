@@ -148,6 +148,7 @@ const ModuleDetail: React.FC = () => {
   const selectedLessonIndex = sortedLessons.findIndex((lesson) => lesson.id === selectedLessonId);
   const selectedLessonSummary = selectedLessonIndex >= 0 ? sortedLessons[selectedLessonIndex] : null;
   const moduleLabs = moduleDetail?.labs ?? [];
+  const modalLogsTail = String((instanceModal?.runtime_metadata as Record<string, unknown> | undefined)?.logs_tail ?? '').trim();
 
   const onCompleteLesson = async (lesson: LessonSummary) => {
     if (lesson.is_completed) {
@@ -506,7 +507,11 @@ const ModuleDetail: React.FC = () => {
                   )}
                 </div>
               )}
-              {modalTab === 'logs' && <div className="text-slate-500">Logs endpoint not implemented yet.</div>}
+              {modalTab === 'logs' && (
+                <div className="bg-slate-950 text-slate-200 rounded-lg p-3 font-mono text-xs whitespace-pre-wrap break-words">
+                  {modalLogsTail || instanceModal.last_error || 'Logs are not available yet.'}
+                </div>
+              )}
               {modalTab === 'env' && <div className="text-slate-500">Environment values are masked by backend and will appear here when provided.</div>}
               {modalTab === 'resources' && <div className="text-slate-500">Resources snapshot shown in orchestration; timeseries soon.</div>}
             </div>

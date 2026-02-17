@@ -3,8 +3,21 @@ const TOKEN_KEY = 'idn_token';
 let unauthorizedHandler: (() => void) | null = null;
 
 const getBaseUrl = (): string => {
-  const value = import.meta.env.VITE_API_BASE_URL;
-  return typeof value === 'string' ? value : '';
+  const configured = import.meta.env.VITE_API_BASE_URL;
+  if (typeof configured === 'string' && configured.trim() !== '') {
+    return configured.trim().replace(/\/$/, '');
+  }
+
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  const { protocol, hostname, port, origin } = window.location;
+  if (port === '5173') {
+    return `${protocol}//${hostname}:8000`;
+  }
+
+  return origin.replace(/\/$/, '');
 };
 
 const getAuthToken = (): string | null => localStorage.getItem(TOKEN_KEY);
@@ -26,11 +39,15 @@ type RequestOptions = Omit<RequestInit, 'headers' | 'body'> & {
   headers?: Record<string, string>;
 };
 
+const isFormDataBody = (body: unknown): body is FormData =>
+  typeof FormData !== 'undefined' && body instanceof FormData;
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const token = getAuthToken();
+  const formDataBody = isFormDataBody(options.body);
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    ...(options.body !== undefined && !formDataBody ? { 'Content-Type': 'application/json' } : {}),
     ...(options.headers ?? {}),
   };
 
@@ -41,7 +58,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const response = await fetch(`${getBaseUrl()}${path}`, {
     ...options,
     headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body: options.body === undefined
+      ? undefined
+      : (formDataBody ? options.body : JSON.stringify(options.body)),
   });
 
   if (response.status === 401) {
@@ -85,4 +104,3 @@ export const apiClient = {
   setUnauthorizedHandler,
   TOKEN_KEY,
 };
-
