@@ -16,7 +16,7 @@ class StoreLabTemplateRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'slug' => ['required', 'string', 'max:120', Rule::unique('lab_templates', 'slug')],
+            'slug' => ['required', 'string', 'max:120'],
             'title' => ['required', 'string', 'max:255'],
             'difficulty' => ['required', 'string', 'max:50'],
             'category' => ['required', 'string', 'max:100'],
@@ -26,11 +26,17 @@ class StoreLabTemplateRequest extends FormRequest
             'objectives' => ['required', 'array'],
             'prerequisites' => ['required', 'array'],
             'tags' => ['required', 'array'],
+            'assets' => ['nullable', 'array'],
             'version' => ['required', 'string', 'max:32'],
             'status' => ['nullable', Rule::enum(LabTemplateStatus::class)],
             'lab_summary' => ['nullable', 'array'],
-            'docker_image' => ['required', 'string', 'max:255'],
-            'internal_port' => ['required', 'integer', 'min:1', 'max:65535'],
+            'configuration' => ['required', 'array'],
+            'configuration.type' => ['required', Rule::in(['docker-compose', 'dockerfile'])],
+            'configuration.content' => ['required', 'string'],
+            'configuration.base_port' => ['required', 'integer', 'min:1', 'max:65535'],
+
+            'docker_image' => ['nullable', 'string', 'max:255'],
+            'internal_port' => ['nullable', 'integer', 'min:1', 'max:65535'],
             'env_vars' => ['nullable', 'array'],
             'resource_limits' => ['nullable', 'array'],
         ];

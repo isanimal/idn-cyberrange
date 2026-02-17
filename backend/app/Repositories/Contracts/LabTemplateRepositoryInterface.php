@@ -11,6 +11,8 @@ interface LabTemplateRepositoryInterface
 
     public function findByIdOrSlug(string $idOrSlug, bool $latestOnly = true): ?LabTemplate;
 
+    public function findPublishedByVersion(string $familyUuid, string $version): ?LabTemplate;
+
     public function findLatestPublishedInFamily(string $familyUuid): ?LabTemplate;
 
     public function markFamilyVersionsNotLatest(string $familyUuid): void;

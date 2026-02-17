@@ -9,9 +9,12 @@ class LabTemplateResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $configType = $this->configuration_type ?? 'docker-compose';
+        $configContent = $this->configuration_content
+            ?? ("version: '3.9'\nservices:\n  app:\n    image: ".($this->docker_image ?? 'nginx:alpine')."\n    ports:\n      - \"\\$".'{PORT}:'.($this->internal_port ?? 80)."\"\n");
+
         return [
             'id' => $this->id,
-            'template_family_uuid' => $this->template_family_uuid,
             'slug' => $this->slug,
             'title' => $this->title,
             'difficulty' => $this->difficulty,
@@ -24,15 +27,12 @@ class LabTemplateResource extends JsonResource
             'tags' => $this->tags ?? [],
             'version' => $this->version,
             'status' => $this->status?->value ?? $this->status,
-            'is_latest' => (bool) $this->is_latest,
-            'published_at' => optional($this->published_at)?->toIso8601String(),
+            'assets' => $this->assets ?? [],
             'changelog' => $this->changelog ?? [],
-            'lab_summary' => $this->lab_summary ?? (object) [],
             'configuration' => [
-                'docker_image' => $this->docker_image,
-                'internal_port' => $this->internal_port,
-                'env_vars' => $this->env_vars ?? (object) [],
-                'resource_limits' => $this->resource_limits ?? (object) [],
+                'type' => $configType,
+                'content' => $configContent,
+                'base_port' => (int) ($this->configuration_base_port ?? $this->internal_port ?? 80),
             ],
             'created_at' => optional($this->created_at)?->toIso8601String(),
             'updated_at' => optional($this->updated_at)?->toIso8601String(),

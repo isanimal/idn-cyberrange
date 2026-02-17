@@ -8,7 +8,8 @@ use App\Models\User;
 use App\Repositories\Contracts\LabInstanceRepositoryInterface;
 use App\Services\Audit\AuditLogService;
 use App\Services\Orchestration\LabOrchestratorService;
-use Illuminate\Database\Eloquent\Collection;
+use App\Services\Orchestration\PortAllocatorService;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class LabInstanceService
@@ -17,15 +18,25 @@ class LabInstanceService
         private readonly LabTemplateService $templates,
         private readonly LabInstanceRepositoryInterface $instances,
         private readonly LabOrchestratorService $orchestrator,
+        private readonly PortAllocatorService $ports,
         private readonly AuditLogService $audit,
     ) {
     }
 
-    public function activate(string $templateId, User $user): LabInstance
+    public function activate(string $templateId, User $user, ?string $pinVersion = null): LabInstance
     {
-        $template = $this->templates->findOrFail($templateId);
+        $template = $this->templates->findPublishedForUserCatalogOrFail($templateId);
 
-        $instance = $this->instances->findByTemplateForUser($template->id, $user);
+        if ($pinVersion) {
+            $pinned = $this->templates->findPublishedByVersion($template->template_family_uuid, $pinVersion);
+            if (! $pinned) {
+                throw new HttpException(422, 'Requested pin_version not available.');
+            }
+            $template = $pinned;
+        }
+
+        $instance = $this->instances->findByTemplateFamilyForUser($template->template_family_uuid, $user);
+
         if (! $instance) {
             $instance = $this->instances->create([
                 'user_id' => $user->id,
@@ -35,21 +46,27 @@ class LabInstanceService
                 'progress_percent' => 0,
                 'attempts_count' => 0,
                 'notes' => '',
+                'score' => 0,
                 'started_at' => now(),
                 'last_activity_at' => now(),
             ]);
         }
 
-        $port = $this->findAvailablePort();
+        $port = $instance->assigned_port ?: $this->ports->allocate($instance->id);
         $instance = $this->orchestrator->startInstance($instance, $template, $port);
+
         $instance = $this->instances->update($instance, [
+            'lab_template_id' => $template->id,
+            'template_version_pinned' => $template->version,
             'state' => LabInstanceState::ACTIVE,
-            'started_at' => $instance->started_at ?? now(),
             'last_activity_at' => now(),
             'attempts_count' => $instance->attempts_count + 1,
         ]);
 
-        $this->audit->log('LAB_INSTANCE_ACTIVATED', $user->id, 'LabInstance', $instance->id, ['template_id' => $template->id]);
+        $this->audit->log('LAB_INSTANCE_ACTIVATED', $user->id, 'LabInstance', $instance->id, [
+            'template_id' => $template->id,
+            'version' => $template->version,
+        ]);
 
         return $instance;
     }
@@ -58,6 +75,8 @@ class LabInstanceService
     {
         $instance = $this->findInstanceForUserOrFail($instanceId, $user);
         $instance = $this->orchestrator->stopInstance($instance);
+
+        $this->ports->releaseByInstance($instance->id);
 
         $instance = $this->instances->update($instance, [
             'state' => LabInstanceState::INACTIVE,
@@ -77,54 +96,88 @@ class LabInstanceService
         return $this->instances->update($instance, ['last_activity_at' => now()]);
     }
 
-    public function upgrade(string $instanceId, ?string $targetTemplateId, string $strategy, User $user): LabInstance
+    public function updateInstance(string $instanceId, User $user, array $data): LabInstance
+    {
+        $instance = $this->findInstanceForUserOrFail($instanceId, $user);
+
+        return $this->instances->update($instance, $data + ['last_activity_at' => now()]);
+    }
+
+    public function upgrade(string $instanceId, ?string $toVersion, string $strategy, User $user): LabInstance
     {
         $instance = $this->findInstanceForUserOrFail($instanceId, $user);
         $currentTemplate = $this->templates->findOrFail($instance->lab_template_id);
 
-        $targetTemplate = $targetTemplateId
-            ? $this->templates->findOrFail($targetTemplateId)
-            : $this->templates->findLatestPublishedForFamily($currentTemplate->template_family_uuid);
+        $targetTemplate = null;
+        if ($toVersion && str_starts_with($toVersion, 'BY_TEMPLATE_ID:')) {
+            $targetTemplate = $this->templates->findOrFail(substr($toVersion, 15));
+        } elseif ($toVersion) {
+            $targetTemplate = $this->templates->findPublishedByVersion($currentTemplate->template_family_uuid, $toVersion);
+        } else {
+            $targetTemplate = $this->templates->findLatestPublishedForFamily($currentTemplate->template_family_uuid);
+        }
 
         if (! $targetTemplate) {
-            throw new HttpException(422, 'No published target version available for upgrade.');
+            throw new HttpException(422, 'Target version not found.');
         }
 
         if ($strategy === 'IN_PLACE' && ! $this->isInPlaceCompatible($currentTemplate, $targetTemplate)) {
-            throw new HttpException(422, 'IN_PLACE upgrade is not compatible with this template version.');
+            throw new HttpException(422, 'IN_PLACE upgrade is not compatible with this target version.');
         }
 
         if ($strategy === 'RESET') {
             $instance = $this->instances->update($instance, [
                 'progress_percent' => 0,
                 'notes' => '',
+                'score' => 0,
                 'completed_at' => null,
             ]);
         }
 
-        $assignedPort = $instance->assigned_port ?? $this->findAvailablePort();
-        $instance = $this->orchestrator->upgradeInstance($instance, $targetTemplate, $strategy, $assignedPort);
+        $port = $instance->assigned_port ?: $this->ports->allocate($instance->id);
+        $instance = $this->orchestrator->upgradeInstance($instance, $targetTemplate, $strategy, $port);
 
         $instance = $this->instances->update($instance, [
             'lab_template_id' => $targetTemplate->id,
             'template_version_pinned' => $targetTemplate->version,
             'state' => LabInstanceState::ACTIVE,
             'last_activity_at' => now(),
-            'started_at' => $instance->started_at ?? now(),
         ]);
 
         $this->audit->log('LAB_INSTANCE_UPGRADED', $user->id, 'LabInstance', $instance->id, [
-            'from_template_id' => $currentTemplate->id,
-            'target_template_id' => $targetTemplate->id,
+            'from_version' => $currentTemplate->version,
+            'to_version' => $targetTemplate->version,
             'strategy' => $strategy,
         ]);
 
         return $instance;
     }
 
-    public function myInstances(User $user): Collection
+    public function myInstances(User $user, array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
-        return $this->instances->myInstances($user);
+        return $this->instances->myInstances($user, $filters, $perPage);
+    }
+
+    public function findUserInstanceForTemplateFamily(User $user, $template): ?LabInstance
+    {
+        return $this->instances->findByTemplateFamilyForUser($template->template_family_uuid, $user);
+    }
+
+    public function forceStopByAdmin(string $instanceId): LabInstance
+    {
+        $instance = $this->instances->findById($instanceId);
+
+        if (! $instance) {
+            throw new \Illuminate\Database\Eloquent\ModelNotFoundException('Lab instance not found.');
+        }
+
+        $instance = $this->orchestrator->stopInstance($instance);
+        $this->ports->releaseByInstance($instance->id);
+
+        return $this->instances->update($instance, [
+            'state' => LabInstanceState::INACTIVE,
+            'last_activity_at' => now(),
+        ]);
     }
 
     public function findInstanceForUserOrFail(string $id, User $user): LabInstance
@@ -144,14 +197,7 @@ class LabInstanceService
             return false;
         }
 
-        return $currentTemplate->internal_port === $targetTemplate->internal_port;
-    }
-
-    private function findAvailablePort(): int
-    {
-        $start = config('labs.port_start', 20000);
-        $end = config('labs.port_end', 30000);
-
-        return random_int($start, $end);
+        return (int) ($currentTemplate->configuration_base_port ?? $currentTemplate->internal_port) ===
+            (int) ($targetTemplate->configuration_base_port ?? $targetTemplate->internal_port);
     }
 }

@@ -10,26 +10,38 @@ class EloquentLabTemplateRepository implements LabTemplateRepositoryInterface
 {
     public function paginatePublished(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
-        return LabTemplate::query()
+        $sort = $filters['sort'] ?? 'newest';
+
+        $query = LabTemplate::query()
             ->where('status', 'PUBLISHED')
             ->where('is_latest', true)
-            ->when(isset($filters['search']), function ($query) use ($filters): void {
+            ->when(! empty($filters['search']), function ($q) use ($filters): void {
                 $search = strtolower(trim((string) $filters['search']));
-                $query->where(function ($q) use ($search): void {
-                    $q->whereRaw('LOWER(title) LIKE ?', ["%{$search}%"])
-                        ->orWhereRaw('LOWER(short_description) LIKE ?', ["%{$search}%"]);
+                $q->where(function ($sub) use ($search): void {
+                    $sub->whereRaw('LOWER(title) LIKE ?', ["%{$search}%"])
+                        ->orWhereRaw('LOWER(short_description) LIKE ?', ["%{$search}%"])
+                        ->orWhereRaw('LOWER(category) LIKE ?', ["%{$search}%"]);
                 });
             })
-            ->latest('published_at')
-            ->paginate($perPage);
+            ->when(! empty($filters['difficulty']), fn ($q) => $q->where('difficulty', $filters['difficulty']))
+            ->when(! empty($filters['category']), fn ($q) => $q->where('category', $filters['category']))
+            ->when(! empty($filters['tag']), fn ($q) => $q->whereJsonContains('tags', $filters['tag']));
+
+        match ($sort) {
+            'title_asc' => $query->orderBy('title'),
+            'title_desc' => $query->orderByDesc('title'),
+            'oldest' => $query->orderBy('published_at'),
+            default => $query->orderByDesc('published_at'),
+        };
+
+        return $query->paginate($perPage);
     }
 
     public function findByIdOrSlug(string $idOrSlug, bool $latestOnly = true): ?LabTemplate
     {
-        $query = LabTemplate::query()
-            ->where(function ($q) use ($idOrSlug): void {
-                $q->where('id', $idOrSlug)->orWhere('slug', $idOrSlug);
-            });
+        $query = LabTemplate::query()->where(function ($q) use ($idOrSlug): void {
+            $q->where('id', $idOrSlug)->orWhere('slug', $idOrSlug);
+        });
 
         if ($latestOnly) {
             $query->where('is_latest', true);
@@ -39,6 +51,15 @@ class EloquentLabTemplateRepository implements LabTemplateRepositoryInterface
             ->orderByDesc('is_latest')
             ->orderByDesc('published_at')
             ->latest('created_at')
+            ->first();
+    }
+
+    public function findPublishedByVersion(string $familyUuid, string $version): ?LabTemplate
+    {
+        return LabTemplate::query()
+            ->where('template_family_uuid', $familyUuid)
+            ->where('version', $version)
+            ->where('status', 'PUBLISHED')
             ->first();
     }
 

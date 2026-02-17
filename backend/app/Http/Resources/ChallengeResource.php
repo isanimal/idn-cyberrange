@@ -18,6 +18,8 @@ class ChallengeResource extends JsonResource
             'max_attempts' => $this->max_attempts,
             'cooldown_seconds' => $this->cooldown_seconds,
             'is_active' => (bool) $this->is_active,
+            'is_solved' => (bool) ($this->is_solved ?? false),
+            'attempts_used' => (int) ($this->attempts_used ?? 0),
             'created_at' => optional($this->created_at)?->toIso8601String(),
             'updated_at' => optional($this->updated_at)?->toIso8601String(),
         ];

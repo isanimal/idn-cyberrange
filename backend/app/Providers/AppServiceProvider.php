@@ -10,6 +10,7 @@ use App\Repositories\Eloquent\EloquentChallengeRepository;
 use App\Repositories\Eloquent\EloquentLabInstanceRepository;
 use App\Repositories\Eloquent\EloquentLabTemplateRepository;
 use App\Repositories\Eloquent\EloquentSubmissionRepository;
+use App\Services\Orchestration\FakeDockerDriver;
 use App\Services\Orchestration\FutureK8sDriver;
 use App\Services\Orchestration\LabDriverInterface;
 use App\Services\Orchestration\LocalDockerDriver;
@@ -28,18 +29,18 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(SubmissionRepositoryInterface::class, EloquentSubmissionRepository::class);
 
         $this->app->bind(LabDriverInterface::class, function () {
-            return config('labs.driver') === 'k8s'
-                ? new FutureK8sDriver()
-                : new LocalDockerDriver();
+            return match (config('labs.driver')) {
+                'k8s' => new FutureK8sDriver(),
+                'fake' => new FakeDockerDriver(),
+                default => app()->environment('testing') ? new FakeDockerDriver() : new LocalDockerDriver(),
+            };
         });
     }
 
     public function boot(): void
     {
         RateLimiter::for('challenge-submission', function (Request $request) {
-            return [
-                Limit::perMinute(30)->by($request->user()?->id ?: $request->ip()),
-            ];
+            return [Limit::perMinute(30)->by($request->user()?->id ?: $request->ip())];
         });
     }
 }

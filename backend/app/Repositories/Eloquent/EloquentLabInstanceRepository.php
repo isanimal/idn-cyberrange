@@ -5,10 +5,15 @@ namespace App\Repositories\Eloquent;
 use App\Models\LabInstance;
 use App\Models\User;
 use App\Repositories\Contracts\LabInstanceRepositoryInterface;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 class EloquentLabInstanceRepository implements LabInstanceRepositoryInterface
 {
+    public function findById(string $id): ?LabInstance
+    {
+        return LabInstance::query()->find($id);
+    }
+
     public function findByIdForUser(string $id, User $user): ?LabInstance
     {
         return LabInstance::query()
@@ -26,6 +31,17 @@ class EloquentLabInstanceRepository implements LabInstanceRepositoryInterface
             ->first();
     }
 
+    public function findByTemplateFamilyForUser(string $familyUuid, User $user): ?LabInstance
+    {
+        return LabInstance::query()
+            ->where('lab_instances.user_id', $user->id)
+            ->join('lab_templates', 'lab_templates.id', '=', 'lab_instances.lab_template_id')
+            ->where('lab_templates.template_family_uuid', $familyUuid)
+            ->orderByDesc('lab_instances.last_activity_at')
+            ->select('lab_instances.*')
+            ->first();
+    }
+
     public function create(array $data): LabInstance
     {
         return LabInstance::query()->create($data);
@@ -39,11 +55,12 @@ class EloquentLabInstanceRepository implements LabInstanceRepositoryInterface
         return $instance->refresh();
     }
 
-    public function myInstances(User $user): Collection
+    public function myInstances(User $user, array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
         return LabInstance::query()
             ->where('user_id', $user->id)
+            ->when(! empty($filters['state']), fn ($q) => $q->where('state', $filters['state']))
             ->latest('last_activity_at')
-            ->get();
+            ->paginate($perPage);
     }
 }

@@ -18,6 +18,7 @@ class LabInstanceResource extends JsonResource
             'progress_percent' => $this->progress_percent,
             'attempts_count' => $this->attempts_count,
             'notes' => $this->notes,
+            'score' => $this->score,
             'started_at' => optional($this->started_at)?->toIso8601String(),
             'last_activity_at' => optional($this->last_activity_at)?->toIso8601String(),
             'completed_at' => optional($this->completed_at)?->toIso8601String(),

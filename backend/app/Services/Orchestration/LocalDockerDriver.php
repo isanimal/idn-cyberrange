@@ -10,133 +10,120 @@ class LocalDockerDriver implements LabDriverInterface
 {
     public function startInstance(LabInstance $instance, LabTemplate $template, int $assignedPort): array
     {
-        if (app()->environment('testing')) {
-            return [
-                'container_name' => $this->containerName($instance->id),
-                'container_id' => 'testing-container',
-                'network' => config('labs.network'),
-                'driver_mode' => 'testing-bypass',
-            ];
+        $workdir = rtrim(config('labs.runtime_root'), '/').'/'.$instance->id;
+        $composePath = $workdir.'/docker-compose.yml';
+
+        if (! is_dir($workdir) && ! @mkdir($workdir, 0775, true) && ! is_dir($workdir)) {
+            throw new \RuntimeException('Failed to create workdir: '.$workdir);
         }
 
-        return $this->runContainer($instance, $template, $assignedPort);
+        $composeContent = $this->renderCompose($template, $assignedPort);
+        file_put_contents($composePath, $composeContent);
+
+        if (! app()->environment('testing')) {
+            $process = new Process(['docker', 'compose', '-f', $composePath, 'up', '-d']);
+            $process->run();
+
+            if (! $process->isSuccessful()) {
+                throw new \RuntimeException('Failed to start lab instance: '.$process->getErrorOutput());
+            }
+        }
+
+        return [
+            'container_name' => 'lab_'.$instance->id,
+            'compose_path' => $composePath,
+            'workdir' => $workdir,
+            'network_name' => 'lab_net_'.$instance->id,
+            'assigned_port' => $assignedPort,
+        ];
     }
 
     public function stopInstance(LabInstance $instance): array
     {
-        if (app()->environment('testing')) {
-            return ['container_name' => $this->containerName($instance->id), 'status' => 'stopped', 'driver_mode' => 'testing-bypass'];
+        $composePath = data_get($instance->runtime_metadata, 'compose_path');
+
+        if ($composePath && ! app()->environment('testing')) {
+            $process = new Process(['docker', 'compose', '-f', $composePath, 'down', '-v']);
+            $process->run();
+
+            if (! $process->isSuccessful()) {
+                throw new \RuntimeException('Failed to stop lab instance: '.$process->getErrorOutput());
+            }
         }
 
-        $container = $this->containerName($instance->id);
-        $process = new Process(['docker', 'stop', $container]);
-        $process->run();
-
-        if (! $process->isSuccessful()) {
-            throw new \RuntimeException('Failed to stop container: '.$process->getErrorOutput());
-        }
-
-        return ['container_name' => $container, 'status' => 'stopped'];
+        return ['status' => 'stopped'];
     }
 
     public function restartInstance(LabInstance $instance): array
     {
-        if (app()->environment('testing')) {
-            return ['container_name' => $this->containerName($instance->id), 'status' => 'restarted', 'driver_mode' => 'testing-bypass'];
+        $composePath = data_get($instance->runtime_metadata, 'compose_path');
+
+        if ($composePath && ! app()->environment('testing')) {
+            $process = new Process(['docker', 'compose', '-f', $composePath, 'restart']);
+            $process->run();
+
+            if (! $process->isSuccessful()) {
+                throw new \RuntimeException('Failed to restart lab instance: '.$process->getErrorOutput());
+            }
         }
 
-        $container = $this->containerName($instance->id);
-        $process = new Process(['docker', 'restart', $container]);
-        $process->run();
-
-        if (! $process->isSuccessful()) {
-            throw new \RuntimeException('Failed to restart container: '.$process->getErrorOutput());
-        }
-
-        return ['container_name' => $container, 'status' => 'restarted'];
+        return ['status' => 'restarted'];
     }
 
     public function destroyInstance(LabInstance $instance): array
     {
-        if (app()->environment('testing')) {
-            return ['container_name' => $this->containerName($instance->id), 'status' => 'destroyed', 'driver_mode' => 'testing-bypass'];
+        $composePath = data_get($instance->runtime_metadata, 'compose_path');
+        $workdir = data_get($instance->runtime_metadata, 'workdir');
+
+        if ($composePath && ! app()->environment('testing')) {
+            $process = new Process(['docker', 'compose', '-f', $composePath, 'down', '-v']);
+            $process->run();
         }
 
-        $container = $this->containerName($instance->id);
-        $process = new Process(['docker', 'rm', '-f', $container]);
-        $process->run();
-
-        if (! $process->isSuccessful()) {
-            throw new \RuntimeException('Failed to remove container: '.$process->getErrorOutput());
+        if ($workdir && is_dir($workdir)) {
+            $this->deleteDirectory($workdir);
         }
 
-        return ['container_name' => $container, 'status' => 'destroyed'];
+        return ['status' => 'destroyed'];
     }
 
     public function upgradeInstance(LabInstance $instance, LabTemplate $targetTemplate, string $strategy, int $assignedPort): array
     {
-        if (app()->environment('testing')) {
-            return [
-                'strategy' => $strategy,
-                'target_template_id' => $targetTemplate->id,
-                'assigned_port' => $assignedPort,
-                'driver_mode' => 'testing-bypass',
-            ];
-        }
+        $this->destroyInstance($instance);
 
-        // Reset/in-place both recreate runtime with pinned target image.
-        $this->destroyIfExists($instance);
-        $run = $this->runContainer($instance, $targetTemplate, $assignedPort);
-
-        return [
+        return $this->startInstance($instance, $targetTemplate, $assignedPort) + [
             'strategy' => $strategy,
             'target_template_id' => $targetTemplate->id,
-            'assigned_port' => $assignedPort,
-            'container' => $run,
         ];
     }
 
-    private function runContainer(LabInstance $instance, LabTemplate $template, int $assignedPort): array
+    private function renderCompose(LabTemplate $template, int $assignedPort): string
     {
-        $container = $this->containerName($instance->id);
-        $network = config('labs.network');
-        $command = [
-            'docker', 'run', '-d', '--name', $container,
-            '--network', $network,
-            '-p', $assignedPort.':'.$template->internal_port,
-        ];
+        $basePort = (int) ($template->configuration_base_port ?? $template->internal_port ?? 80);
 
-        foreach (($template->env_vars ?? []) as $key => $value) {
-            $command[] = '-e';
-            $command[] = $key.'='.$value;
+        if (($template->configuration_type ?? 'docker-compose') === 'docker-compose' && $template->configuration_content) {
+            return str_replace(['${PORT}', '${BASE_PORT}'], [(string) $assignedPort, (string) $basePort], $template->configuration_content);
         }
 
-        $command[] = $template->docker_image;
+        $image = $template->docker_image ?? 'nginx:alpine';
 
-        $process = new Process($command);
-        $process->run();
+        return "version: '3.9'\nservices:\n  app:\n    image: {$image}\n    ports:\n      - \"{$assignedPort}:{$basePort}\"\n";
+    }
 
-        if (! $process->isSuccessful()) {
-            throw new \RuntimeException('Failed to start lab instance: '.$process->getErrorOutput());
+    private function deleteDirectory(string $directory): void
+    {
+        $items = @scandir($directory) ?: [];
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+            $path = $directory.'/'.$item;
+            if (is_dir($path)) {
+                $this->deleteDirectory($path);
+            } else {
+                @unlink($path);
+            }
         }
-
-        return [
-            'container_name' => $container,
-            'container_id' => trim($process->getOutput()),
-            'network' => $network,
-        ];
-    }
-
-    private function destroyIfExists(LabInstance $instance): void
-    {
-        $container = $this->containerName($instance->id);
-        $process = new Process(['docker', 'rm', '-f', $container]);
-        $process->run();
-        // ignore errors if the container does not exist
-    }
-
-    private function containerName(string $instanceId): string
-    {
-        return 'lab_'.$instanceId;
+        @rmdir($directory);
     }
 }

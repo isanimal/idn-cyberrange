@@ -20,7 +20,16 @@ class LabController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $result = $this->templates->listPublished($request->all(), (int) $request->integer('per_page', 15));
+        $filters = [
+            'search' => $request->query('search'),
+            'difficulty' => $request->query('difficulty'),
+            'category' => $request->query('category'),
+            'tag' => $request->query('tag'),
+            'sort' => $request->query('sort'),
+            'status' => 'PUBLISHED',
+        ];
+
+        $result = $this->templates->listPublished($filters, (int) $request->integer('limit', 15));
 
         return response()->json([
             'data' => LabTemplateResource::collection($result->items()),
@@ -32,11 +41,10 @@ class LabController extends Controller
         ]);
     }
 
-    public function show(Request $request, string $id): JsonResponse
+    public function show(Request $request, string $id_or_slug): JsonResponse
     {
-        $template = $this->templates->findOrFail($id);
-        $instance = $this->instances->myInstances($request->user())
-            ->firstWhere('lab_template_id', $template->id);
+        $template = $this->templates->findPublishedForUserCatalogOrFail($id_or_slug);
+        $instance = $this->instances->findUserInstanceForTemplateFamily($request->user(), $template);
 
         $template->setRelation('user_instance', $instance);
 

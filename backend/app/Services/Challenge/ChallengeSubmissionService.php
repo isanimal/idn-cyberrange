@@ -11,6 +11,7 @@ use App\Repositories\Contracts\SubmissionRepositoryInterface;
 use App\Services\Audit\AuditLogService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Collection;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ChallengeSubmissionService
@@ -20,6 +21,16 @@ class ChallengeSubmissionService
         private readonly SubmissionRepositoryInterface $submissions,
         private readonly AuditLogService $audit,
     ) {
+    }
+
+    public function listLabChallengesWithUserProgress(User $user, string $templateId): Collection
+    {
+        return $this->challenges->listByTemplate($templateId)->map(function ($challenge) use ($user) {
+            $challenge->is_solved = (bool) $this->submissions->findCorrectForUserChallenge($user->id, $challenge->id);
+            $challenge->attempts_used = $this->submissions->countForUserChallenge($user->id, $challenge->id);
+
+            return $challenge;
+        });
     }
 
     public function submit(User $user, string $challengeId, string $flag): array

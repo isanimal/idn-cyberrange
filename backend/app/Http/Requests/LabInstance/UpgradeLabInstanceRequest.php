@@ -15,7 +15,8 @@ class UpgradeLabInstanceRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'target_template_id' => ['nullable', 'uuid', 'exists:lab_templates,id'],
+            'to_version' => ['nullable', 'string', 'max:32'],
+            'target_template_id' => ['nullable', 'uuid', 'exists:lab_templates,id'], // backward compatible
             'strategy' => ['required', Rule::in(['RESET', 'IN_PLACE'])],
         ];
     }

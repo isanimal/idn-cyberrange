@@ -15,10 +15,8 @@ class UpdateLabTemplateRequest extends FormRequest
 
     public function rules(): array
     {
-        $labId = $this->route('id');
-
         return [
-            'slug' => ['sometimes', 'string', 'max:120', Rule::unique('lab_templates', 'slug')->ignore($labId)],
+            'slug' => ['sometimes', 'string', 'max:120'],
             'title' => ['sometimes', 'string', 'max:255'],
             'difficulty' => ['sometimes', 'string', 'max:50'],
             'category' => ['sometimes', 'string', 'max:100'],
@@ -28,13 +26,19 @@ class UpdateLabTemplateRequest extends FormRequest
             'objectives' => ['sometimes', 'array'],
             'prerequisites' => ['sometimes', 'array'],
             'tags' => ['sometimes', 'array'],
+            'assets' => ['sometimes', 'array'],
             'version' => ['sometimes', 'string', 'max:32'],
             'status' => ['sometimes', Rule::enum(LabTemplateStatus::class)],
             'lab_summary' => ['nullable', 'array'],
-            'docker_image' => ['sometimes', 'string', 'max:255'],
-            'internal_port' => ['sometimes', 'integer', 'min:1', 'max:65535'],
-            'env_vars' => ['nullable', 'array'],
-            'resource_limits' => ['nullable', 'array'],
+            'configuration' => ['sometimes', 'array'],
+            'configuration.type' => ['sometimes', Rule::in(['docker-compose', 'dockerfile'])],
+            'configuration.content' => ['sometimes', 'string'],
+            'configuration.base_port' => ['sometimes', 'integer', 'min:1', 'max:65535'],
+
+            'docker_image' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'internal_port' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:65535'],
+            'env_vars' => ['sometimes', 'nullable', 'array'],
+            'resource_limits' => ['sometimes', 'nullable', 'array'],
         ];
     }
 }

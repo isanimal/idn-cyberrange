@@ -3,6 +3,7 @@
 namespace App\Services\Orchestration;
 
 use App\Models\LabInstance;
+use App\Models\LabInstanceRuntime;
 use App\Models\LabTemplate;
 use Illuminate\Support\Facades\DB;
 
@@ -21,6 +22,8 @@ class LabOrchestratorService
             'assigned_port' => $assignedPort,
             'connection_url' => sprintf('http://%s:%d', config('labs.host'), $assignedPort),
         ])->save();
+
+        $this->syncRuntime($instance, $metadata);
 
         return $instance->refresh();
     }
@@ -54,6 +57,7 @@ class LabOrchestratorService
         DB::transaction(function () use ($instance): void {
             $this->driver->destroyInstance($instance);
             $instance->fill(['connection_url' => null, 'assigned_port' => null])->save();
+            $instance->runtime()->delete();
         });
 
         return $instance->refresh();
@@ -69,6 +73,22 @@ class LabOrchestratorService
             'connection_url' => sprintf('http://%s:%d', config('labs.host'), $assignedPort),
         ])->save();
 
+        $this->syncRuntime($instance, $metadata);
+
         return $instance->refresh();
+    }
+
+    private function syncRuntime(LabInstance $instance, array $metadata): void
+    {
+        LabInstanceRuntime::query()->updateOrCreate(
+            ['lab_instance_id' => $instance->id],
+            [
+                'workdir' => $metadata['workdir'] ?? null,
+                'compose_path' => $metadata['compose_path'] ?? null,
+                'network_name' => $metadata['network_name'] ?? null,
+                'container_name' => $metadata['container_name'] ?? null,
+                'runtime_meta' => $metadata,
+            ]
+        );
     }
 }

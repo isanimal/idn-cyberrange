@@ -35,6 +35,22 @@ class LabTemplateService
         return $template;
     }
 
+    public function findPublishedForUserCatalogOrFail(string $idOrSlug): LabTemplate
+    {
+        $template = $this->templates->findByIdOrSlug($idOrSlug, true);
+
+        if (! $template || $template->status !== LabTemplateStatus::PUBLISHED) {
+            throw new ModelNotFoundException('Published lab template not found.');
+        }
+
+        return $template;
+    }
+
+    public function findPublishedByVersion(string $familyUuid, string $version): ?LabTemplate
+    {
+        return $this->templates->findPublishedByVersion($familyUuid, $version);
+    }
+
     public function findLatestPublishedForFamily(string $familyUuid): ?LabTemplate
     {
         return $this->templates->findLatestPublishedInFamily($familyUuid);
@@ -42,10 +58,11 @@ class LabTemplateService
 
     public function create(array $data, string $actorId): LabTemplate
     {
+        $data = $this->normalizePayload($data);
         $data['status'] = $data['status'] ?? LabTemplateStatus::DRAFT;
         $data['changelog'] = $data['changelog'] ?? [];
         $data['template_family_uuid'] = $data['template_family_uuid'] ?? (string) Str::uuid();
-        $data['is_latest'] = $data['is_latest'] ?? true;
+        $data['is_latest'] = true;
 
         $lab = $this->templates->create($data);
         $this->audit->log('ADMIN_LAB_CREATED', $actorId, 'LabTemplate', $lab->id, ['slug' => $lab->slug]);
@@ -55,7 +72,7 @@ class LabTemplateService
 
     public function update(LabTemplate $template, array $data, string $actorId): LabTemplate
     {
-        $lab = $this->templates->update($template, $data);
+        $lab = $this->templates->update($template, $this->normalizePayload($data));
         $this->audit->log('ADMIN_LAB_UPDATED', $actorId, 'LabTemplate', $lab->id);
 
         return $lab;
@@ -93,6 +110,7 @@ class LabTemplateService
             'objectives' => $template->objectives,
             'prerequisites' => $template->prerequisites,
             'tags' => $template->tags,
+            'assets' => $template->assets,
             'version' => $version,
             'status' => LabTemplateStatus::PUBLISHED,
             'is_latest' => true,
@@ -103,6 +121,9 @@ class LabTemplateService
             'internal_port' => $template->internal_port,
             'env_vars' => $template->env_vars,
             'resource_limits' => $template->resource_limits,
+            'configuration_type' => $template->configuration_type,
+            'configuration_content' => $template->configuration_content,
+            'configuration_base_port' => $template->configuration_base_port,
         ]);
 
         $this->audit->log('ADMIN_LAB_PUBLISHED', $actorId, 'LabTemplate', $lab->id, [
@@ -125,5 +146,25 @@ class LabTemplateService
     {
         $this->templates->delete($template);
         $this->audit->log('ADMIN_LAB_DELETED', $actorId, 'LabTemplate', $template->id);
+    }
+
+    private function normalizePayload(array $data): array
+    {
+        if (isset($data['configuration'])) {
+            $data['configuration_type'] = $data['configuration']['type'] ?? null;
+            $data['configuration_content'] = $data['configuration']['content'] ?? null;
+            $data['configuration_base_port'] = $data['configuration']['base_port'] ?? null;
+            unset($data['configuration']);
+        }
+
+        if (! array_key_exists('internal_port', $data)) {
+            $data['internal_port'] = $data['configuration_base_port'] ?? 80;
+        }
+
+        if (! array_key_exists('docker_image', $data)) {
+            $data['docker_image'] = 'nginx:alpine';
+        }
+
+        return $data;
     }
 }

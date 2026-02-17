@@ -33,10 +33,14 @@ class LabTemplate extends Model
         'published_at',
         'changelog',
         'lab_summary',
+        'assets',
         'docker_image',
         'internal_port',
         'env_vars',
         'resource_limits',
+        'configuration_type',
+        'configuration_content',
+        'configuration_base_port',
     ];
 
     protected function casts(): array
@@ -47,6 +51,7 @@ class LabTemplate extends Model
             'tags' => 'array',
             'changelog' => 'array',
             'lab_summary' => 'array',
+            'assets' => 'array',
             'env_vars' => 'array',
             'resource_limits' => 'array',
             'published_at' => 'datetime',

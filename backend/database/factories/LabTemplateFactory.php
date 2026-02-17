@@ -13,6 +13,8 @@ class LabTemplateFactory extends Factory
 
     public function definition(): array
     {
+        $basePort = fake()->randomElement([80, 3000, 8080]);
+
         return [
             'id' => (string) Str::uuid(),
             'template_family_uuid' => (string) Str::uuid(),
@@ -26,13 +28,17 @@ class LabTemplateFactory extends Factory
             'objectives' => ['Objective A', 'Objective B'],
             'prerequisites' => ['Linux basics'],
             'tags' => ['owasp'],
+            'assets' => [],
             'version' => '2026.1.0',
             'status' => LabTemplateStatus::DRAFT,
             'is_latest' => true,
             'docker_image' => 'nginx:alpine',
-            'internal_port' => 80,
+            'internal_port' => $basePort,
             'env_vars' => ['APP_ENV' => 'training'],
             'resource_limits' => ['memory' => '256m'],
+            'configuration_type' => 'docker-compose',
+            'configuration_content' => "version: '3.9'\nservices:\n  app:\n    image: nginx:alpine\n    ports:\n      - \"\\$".'{PORT}:'.$basePort."\"\n",
+            'configuration_base_port' => $basePort,
         ];
     }
 

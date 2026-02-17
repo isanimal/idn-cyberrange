@@ -25,54 +25,108 @@ class DatabaseSeeder extends Seeder
         );
 
         User::query()->updateOrCreate(
-            ['email' => 'user@cyberrange.local'],
+            ['email' => 'user1@cyberrange.local'],
             [
-                'name' => 'Learner',
+                'name' => 'Learner One',
                 'password' => 'password123',
                 'role' => UserRole::USER,
                 'status' => UserStatus::ACTIVE,
             ]
         );
 
-        $lab = LabTemplate::query()->updateOrCreate(
-            ['slug' => 'dvwa-docker', 'version' => '2026.1.0'],
+        User::query()->updateOrCreate(
+            ['email' => 'user2@cyberrange.local'],
             [
-                'template_family_uuid' => '11111111-1111-1111-1111-111111111111',
-                'title' => 'Damn Vulnerable Web Application',
-                'difficulty' => 'EASY',
-                'category' => 'Web Security',
-                'short_description' => 'Learn SQLi and XSS in a vulnerable PHP app.',
-                'long_description' => '# DVWA\nPractice exploitation in a safe environment.',
-                'estimated_time_minutes' => 60,
-                'objectives' => ['SQL Injection', 'XSS'],
-                'prerequisites' => ['HTTP Basics'],
-                'tags' => ['OWASP', 'PHP'],
-                'status' => LabTemplateStatus::PUBLISHED,
-                'is_latest' => true,
-                'published_at' => now(),
-                'changelog' => [[
-                    'version' => '2026.1.0',
-                    'date' => now()->toDateString(),
-                    'notes' => 'Initial release',
-                ]],
-                'lab_summary' => ['type' => 'web', 'stack' => ['php', 'mysql']],
-                'docker_image' => 'vulnerables/web-dvwa',
-                'internal_port' => 80,
-                'env_vars' => ['APP_ENV' => 'training'],
-                'resource_limits' => ['memory' => '512m', 'cpus' => '0.5'],
+                'name' => 'Learner Two',
+                'password' => 'password123',
+                'role' => UserRole::USER,
+                'status' => UserStatus::ACTIVE,
             ]
         );
 
-        Challenge::query()->updateOrCreate(
-            ['lab_template_id' => $lab->id, 'title' => 'Find SQLi Flag'],
+        $labs = [
             [
-                'description' => 'Exploit SQL injection and retrieve the admin flag.',
-                'points' => 100,
-                'flag_hash' => password_hash('FLAG{DVWA_SQLI}', PASSWORD_ARGON2ID),
-                'max_attempts' => 10,
-                'cooldown_seconds' => 30,
-                'is_active' => true,
-            ]
-        );
+                'family' => '11111111-1111-1111-1111-111111111111',
+                'slug' => 'dvwa-docker',
+                'title' => 'DVWA Web Pentest',
+                'difficulty' => 'EASY',
+                'category' => 'Web Security',
+                'version' => '2026.1.0',
+                'status' => LabTemplateStatus::PUBLISHED,
+                'base_port' => 80,
+                'image' => 'vulnerables/web-dvwa',
+            ],
+            [
+                'family' => '22222222-2222-2222-2222-222222222222',
+                'slug' => 'ssti-playground',
+                'title' => 'SSTI Playground',
+                'difficulty' => 'MEDIUM',
+                'category' => 'Web Security',
+                'version' => '2026.1.0',
+                'status' => LabTemplateStatus::PUBLISHED,
+                'base_port' => 3000,
+                'image' => 'node:20-alpine',
+            ],
+            [
+                'family' => '33333333-3333-3333-3333-333333333333',
+                'slug' => 'proto-reverse',
+                'title' => 'Protocol Reverse Draft',
+                'difficulty' => 'HARD',
+                'category' => 'Reverse Engineering',
+                'version' => '2026.0.1',
+                'status' => LabTemplateStatus::DRAFT,
+                'base_port' => 8080,
+                'image' => 'nginx:alpine',
+            ],
+        ];
+
+        foreach ($labs as $row) {
+            $lab = LabTemplate::query()->updateOrCreate(
+                ['slug' => $row['slug'], 'version' => $row['version']],
+                [
+                    'template_family_uuid' => $row['family'],
+                    'title' => $row['title'],
+                    'difficulty' => $row['difficulty'],
+                    'category' => $row['category'],
+                    'short_description' => 'Hands-on cyber range lab for '.$row['title'],
+                    'long_description' => '# '.$row['title']."\n\nFollow objectives and capture flags.",
+                    'estimated_time_minutes' => 75,
+                    'objectives' => ['Enumerate target', 'Exploit vector', 'Capture flag'],
+                    'prerequisites' => ['Linux basics', 'HTTP basics'],
+                    'tags' => ['training', 'ctf'],
+                    'assets' => [],
+                    'status' => $row['status'],
+                    'is_latest' => true,
+                    'published_at' => $row['status'] === LabTemplateStatus::PUBLISHED ? now() : null,
+                    'changelog' => [[
+                        'version' => $row['version'],
+                        'date' => now()->toDateString(),
+                        'notes' => 'Initial seeded version',
+                    ]],
+                    'lab_summary' => ['type' => 'container'],
+                    'docker_image' => $row['image'],
+                    'internal_port' => $row['base_port'],
+                    'configuration_type' => 'docker-compose',
+                    'configuration_content' => "version: '3.9'\nservices:\n  app:\n    image: {$row['image']}\n    ports:\n      - \"\\$".'{PORT}:'.$row['base_port']."\"\n",
+                    'configuration_base_port' => $row['base_port'],
+                    'env_vars' => ['APP_ENV' => 'training'],
+                    'resource_limits' => ['memory' => '512m', 'cpus' => '0.5'],
+                ]
+            );
+
+            for ($i = 1; $i <= 3; $i++) {
+                Challenge::query()->updateOrCreate(
+                    ['lab_template_id' => $lab->id, 'title' => 'Challenge '.$i],
+                    [
+                        'description' => 'Solve challenge '.$i.' for '.$row['title'],
+                        'points' => 100 * $i,
+                        'flag_hash' => password_hash('FLAG{'.$row['slug'].'_'.$i.'}', PASSWORD_ARGON2ID),
+                        'max_attempts' => 10,
+                        'cooldown_seconds' => 15,
+                        'is_active' => true,
+                    ]
+                );
+            }
+        }
     }
 }

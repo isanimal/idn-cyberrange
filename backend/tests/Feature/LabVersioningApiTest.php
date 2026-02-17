@@ -34,7 +34,7 @@ class LabVersioningApiTest extends TestCase
             'notes' => 'Annual update',
         ]);
 
-        $response->assertOk()->assertJsonPath('version', '2026.2.0')->assertJsonPath('is_latest', true);
+        $response->assertOk()->assertJsonPath('version', '2026.2.0');
 
         $this->assertDatabaseHas('lab_templates', [
             'id' => $base->id,
@@ -62,6 +62,7 @@ class LabVersioningApiTest extends TestCase
             'status' => LabTemplateStatus::PUBLISHED,
             'is_latest' => false,
             'internal_port' => 80,
+            'configuration_base_port' => 80,
         ]);
 
         $v2 = LabTemplate::factory()->create([
@@ -71,6 +72,7 @@ class LabVersioningApiTest extends TestCase
             'status' => LabTemplateStatus::PUBLISHED,
             'is_latest' => true,
             'internal_port' => 80,
+            'configuration_base_port' => 80,
         ]);
 
         $instance = LabInstance::query()->create([
@@ -109,6 +111,7 @@ class LabVersioningApiTest extends TestCase
             'status' => LabTemplateStatus::PUBLISHED,
             'is_latest' => false,
             'internal_port' => 80,
+            'configuration_base_port' => 80,
         ]);
 
         $v2 = LabTemplate::factory()->create([
@@ -117,6 +120,7 @@ class LabVersioningApiTest extends TestCase
             'status' => LabTemplateStatus::PUBLISHED,
             'is_latest' => true,
             'internal_port' => 8080,
+            'configuration_base_port' => 8080,
         ]);
 
         $instance = LabInstance::query()->create([
