@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ChallengeController;
 use App\Http\Controllers\Api\V1\LabController;
 use App\Http\Controllers\Api\V1\LabInstanceController;
+use App\Http\Controllers\Api\V1\UserModuleController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -19,6 +20,8 @@ Route::prefix('v1')->group(function (): void {
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
+        Route::get('/modules', [UserModuleController::class, 'index']);
+        Route::get('/modules/{slug}', [UserModuleController::class, 'show']);
 
         Route::get('/labs', [LabController::class, 'index']);
         Route::get('/labs/{id_or_slug}', [LabController::class, 'show']);

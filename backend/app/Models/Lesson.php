@@ -14,6 +14,7 @@ class Lesson extends Model
         'module_id',
         'title',
         'content',
+        'content_markdown',
         'order_index',
     ];
 
@@ -22,4 +23,3 @@ class Lesson extends Model
         return $this->belongsTo(Module::class);
     }
 }
-

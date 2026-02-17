@@ -99,7 +99,12 @@ class AdminModuleController extends Controller
             'order_index' => ['required', 'integer', 'min:1'],
         ]);
 
-        $lesson = $module->lessons()->create($validated);
+        $lesson = $module->lessons()->create([
+            'title' => $validated['title'],
+            'content' => $validated['content'],
+            'content_markdown' => $validated['content'],
+            'order_index' => $validated['order_index'],
+        ]);
 
         return response()->json($this->transformLesson($lesson), Response::HTTP_CREATED);
     }
@@ -115,7 +120,12 @@ class AdminModuleController extends Controller
             'order_index' => ['sometimes', 'integer', 'min:1'],
         ]);
 
-        $lesson->fill($validated);
+        $payload = $validated;
+        if (array_key_exists('content', $payload)) {
+            $payload['content_markdown'] = $payload['content'];
+        }
+
+        $lesson->fill($payload);
         $lesson->save();
 
         return response()->json($this->transformLesson($lesson->fresh()));
@@ -157,11 +167,10 @@ class AdminModuleController extends Controller
             'id' => $lesson->id,
             'module_id' => $lesson->module_id,
             'title' => $lesson->title,
-            'content' => $lesson->content,
+            'content' => $lesson->content_markdown ?? $lesson->content,
             'order_index' => $lesson->order_index,
             'created_at' => $lesson->created_at?->toISOString(),
             'updated_at' => $lesson->updated_at?->toISOString(),
         ];
     }
 }
-

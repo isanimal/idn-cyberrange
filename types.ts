@@ -85,6 +85,34 @@ export interface StatPoint {
   value: number;
 }
 
+export type UserModuleLevel = 'BASIC' | 'INTERMEDIATE' | 'ADVANCED';
+export type UserModuleStatus = 'ACTIVE' | 'LOCKED' | 'DRAFT' | 'ARCHIVED';
+
+export interface UserModuleCardDTO {
+  id: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  level: UserModuleLevel;
+  status: UserModuleStatus;
+  order_index: number;
+  lessons_count: number;
+  progress_percent: number;
+  is_locked: boolean;
+}
+
+export interface UserModuleLessonDTO {
+  id: string;
+  title: string;
+  order_index: number;
+  content_markdown?: string | null;
+}
+
+export interface UserModuleDetailDTO extends UserModuleCardDTO {
+  guide_markdown?: string | null;
+  lessons: UserModuleLessonDTO[];
+}
+
 export type AdminModuleLevel = 'basic' | 'intermediate' | 'advanced';
 export type AdminModuleStatus = 'active' | 'locked' | 'draft';
 
