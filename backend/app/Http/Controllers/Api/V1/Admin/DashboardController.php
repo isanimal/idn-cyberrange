@@ -13,7 +13,46 @@ use Illuminate\Http\JsonResponse;
 
 class DashboardController extends Controller
 {
+    /**
+     * Legacy endpoint shape kept for backward compatibility.
+     */
     public function overview(): JsonResponse
+    {
+        $stats = $this->buildOverviewStats();
+
+        return response()->json([
+            'metrics' => [
+                'totalUsers' => $stats['totals']['users'],
+                'activeLabInstances' => $stats['totals']['active_lab_instances'],
+                'submissions24h' => $stats['totals']['submissions_24h'],
+                'failedJobs' => $stats['totals']['failed_jobs'],
+            ],
+            'flagSubmissionsLast7Days' => collect($stats['submissions_last_7_days'])
+                ->map(fn (array $row): array => [
+                    'date' => $row['date'],
+                    'count' => $row['count'],
+                ])
+                ->values(),
+            'recentAuditLogs' => collect($stats['recent_audit_logs'])
+                ->map(fn (array $row): array => [
+                    'id' => $row['id'],
+                    'tag' => strtoupper($row['actor_name'] ?: 'ADMIN'),
+                    'message' => $row['entity_label'],
+                    'createdAt' => $row['created_at'],
+                    'timeAgo' => $row['created_at_human'],
+                ])
+                ->values(),
+        ]);
+    }
+
+    public function adminOverview(): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->buildOverviewStats(),
+        ]);
+    }
+
+    private function buildOverviewStats(): array
     {
         $now = now();
         $start24h = $now->copy()->subDay();
@@ -21,67 +60,78 @@ class DashboardController extends Controller
 
         $totalUsers = User::query()->count();
         $activeLabInstances = LabInstance::query()->where('state', LabInstanceState::ACTIVE)->count();
+
+        // Existing submissions table is used as canonical source for flag submissions.
         $submissions24h = Submission::query()->where('submitted_at', '>=', $start24h)->count();
+
+        // Failed jobs derived from orchestration runtime failures in last 24h.
         $failedJobs = LabInstance::query()
-            ->where('state', LabInstanceState::ABANDONED)
+            ->where(function ($query): void {
+                $query->where('state', LabInstanceState::ABANDONED)
+                    ->orWhereNotNull('last_error');
+            })
             ->where('updated_at', '>=', $start24h)
             ->count();
 
-        $submissionsByDay = Submission::query()
+        $submissionsByDate = Submission::query()
             ->selectRaw('DATE(submitted_at) as day, COUNT(*) as count')
             ->where('submitted_at', '>=', $start7d)
             ->groupBy('day')
             ->orderBy('day')
             ->pluck('count', 'day');
 
-        $flagSubmissionsLast7Days = [];
+        $submissionsLast7Days = [];
         for ($i = 0; $i < 7; $i++) {
-            $day = $start7d->copy()->addDays($i)->toDateString();
-            $flagSubmissionsLast7Days[] = [
-                'date' => $day,
-                'count' => (int) ($submissionsByDay[$day] ?? 0),
+            $date = $start7d->copy()->addDays($i);
+            $dateString = $date->toDateString();
+            $submissionsLast7Days[] = [
+                'date' => $dateString,
+                'day' => $date->format('D'),
+                'count' => (int) ($submissionsByDate[$dateString] ?? 0),
             ];
         }
 
         $recentAuditLogs = AuditLog::query()
+            ->with(['actor:id,name'])
             ->latest('created_at')
             ->limit(10)
             ->get()
             ->map(function (AuditLog $log): array {
-                $metadata = $log->metadata ?? [];
-                $message = is_array($metadata) && isset($metadata['message']) && is_string($metadata['message'])
+                $metadata = is_array($log->metadata) ? $log->metadata : [];
+                $entityLabel = isset($metadata['message']) && is_string($metadata['message'])
                     ? $metadata['message']
-                    : $this->fallbackMessage($log);
+                    : $this->fallbackEntityLabel($log);
 
                 return [
                     'id' => $log->id,
-                    'tag' => 'ADMIN',
-                    'message' => $message,
-                    'createdAt' => optional($log->created_at)?->toIso8601String(),
-                    'timeAgo' => $log->created_at ? Carbon::parse($log->created_at)->diffForHumans(short: true) : null,
+                    'actor_name' => $log->actor?->name,
+                    'action' => $log->action,
+                    'entity_type' => $log->target_type,
+                    'entity_label' => $entityLabel,
+                    'created_at' => $log->created_at?->toIso8601String(),
+                    'created_at_human' => $log->created_at ? Carbon::parse($log->created_at)->diffForHumans(short: true) : null,
                 ];
             })
-            ->values();
+            ->values()
+            ->all();
 
-        return response()->json([
-            'metrics' => [
-                'totalUsers' => $totalUsers,
-                'activeLabInstances' => $activeLabInstances,
-                'submissions24h' => $submissions24h,
-                'failedJobs' => $failedJobs,
+        return [
+            'totals' => [
+                'users' => $totalUsers,
+                'active_lab_instances' => $activeLabInstances,
+                'submissions_24h' => $submissions24h,
+                'failed_jobs' => $failedJobs,
             ],
-            'flagSubmissionsLast7Days' => $flagSubmissionsLast7Days,
-            'recentAuditLogs' => $recentAuditLogs,
-        ]);
+            'submissions_last_7_days' => $submissionsLast7Days,
+            'recent_audit_logs' => $recentAuditLogs,
+        ];
     }
 
-    private function fallbackMessage(AuditLog $log): string
+    private function fallbackEntityLabel(AuditLog $log): string
     {
-        $target = $log->target_type ?: 'entity';
-        $action = str_replace('_', ' ', strtolower($log->action));
-        $action = ucfirst($action);
+        $action = str_replace('_', ' ', strtolower((string) $log->action));
+        $target = (string) ($log->target_type ?: 'entity');
 
-        return sprintf('%s %s', $action, $target);
+        return trim(ucfirst($action).' '.$target);
     }
 }
-

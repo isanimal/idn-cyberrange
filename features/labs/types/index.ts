@@ -76,6 +76,18 @@ export interface LabInstance {
   expires_at?: string;
   assigned_port?: number; // NEW: The specific external port assigned to this user
   connection_url?: string;
+  status?: string;
+  ip_address?: string | null;
+  exposed_ports?: Array<{ internal: number; external: number }>;
+  gateway?: string | null;
+  max_ttl?: number | null;
+  resources?: {
+    cpu: number | null;
+    memory_mb: number | null;
+  };
+  access_urls?: Array<{ label: string; url: string }>;
+  runtime_metadata?: Record<string, unknown>;
+  last_error?: string | null;
 }
 
 export interface LabDetailResponse extends LabTemplate {

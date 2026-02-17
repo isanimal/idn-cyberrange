@@ -64,4 +64,9 @@ class LabTemplate extends Model
     {
         return $this->hasMany(LabInstance::class);
     }
+
+    public function moduleLinks(): HasMany
+    {
+        return $this->hasMany(ModuleLabTemplate::class, 'lab_template_id');
+    }
 }

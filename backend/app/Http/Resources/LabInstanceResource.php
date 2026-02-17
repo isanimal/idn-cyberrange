@@ -9,6 +9,23 @@ class LabInstanceResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $template = $this->whenLoaded('template');
+        $host = (string) config('labs.host');
+        $assignedPort = $this->assigned_port ? (int) $this->assigned_port : null;
+        $internalPort = $template?->internal_port ? (int) $template->internal_port : 80;
+
+        $runtimeMeta = is_array($this->runtime_metadata) ? $this->runtime_metadata : [];
+        $gateway = data_get($runtimeMeta, 'gateway', $host);
+        $ipAddress = data_get($runtimeMeta, 'ip_address', null);
+
+        $accessUrls = [];
+        if ($assignedPort) {
+            $accessUrls[] = [
+                'label' => 'HTTP',
+                'url' => sprintf('http://%s:%d', $host, $assignedPort),
+            ];
+        }
+
         return [
             'instance_id' => $this->id,
             'user_id' => $this->user_id,
@@ -27,6 +44,19 @@ class LabInstanceResource extends JsonResource
             'connection_url' => $this->connection_url,
             'runtime_metadata' => $this->runtime_metadata ?? (object) [],
             'last_error' => $this->last_error,
+            'status' => $this->state?->value ?? $this->state,
+            'ip_address' => $ipAddress,
+            'exposed_ports' => $assignedPort ? [[
+                'internal' => $internalPort,
+                'external' => $assignedPort,
+            ]] : [],
+            'gateway' => $gateway,
+            'max_ttl' => 3600,
+            'resources' => [
+                'cpu' => null,
+                'memory_mb' => null,
+            ],
+            'access_urls' => $accessUrls,
         ];
     }
 }

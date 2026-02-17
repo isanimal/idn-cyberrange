@@ -88,30 +88,54 @@ export interface StatPoint {
 export type UserModuleLevel = 'BASIC' | 'INTERMEDIATE' | 'ADVANCED';
 export type UserModuleStatus = 'ACTIVE' | 'LOCKED' | 'DRAFT' | 'ARCHIVED';
 
-export interface UserModuleCardDTO {
+export interface ModuleSummary {
   id: string;
   title: string;
   slug: string;
   description: string | null;
-  level: UserModuleLevel;
-  status: UserModuleStatus;
+  level?: UserModuleLevel;
+  difficulty: UserModuleLevel;
+  status: 'PUBLISHED' | 'DRAFT' | 'ARCHIVED';
+  category?: string;
+  est_minutes?: number;
+  version?: string;
+  tags: string[];
+  cover_icon?: string | null;
   order_index: number;
   lessons_count: number;
   progress_percent: number;
   is_locked: boolean;
+  completed_at?: string | null;
 }
 
-export interface UserModuleLessonDTO {
+export interface LessonSummary {
   id: string;
   title: string;
-  order_index: number;
-  content_markdown?: string | null;
+  content_md?: string | null;
+  order: number;
+  is_completed: boolean;
+  completed_at?: string | null;
 }
 
-export interface UserModuleDetailDTO extends UserModuleCardDTO {
-  guide_markdown?: string | null;
-  lessons: UserModuleLessonDTO[];
+export interface ModuleLabSummary {
+  lab_template_id: string;
+  title: string;
+  difficulty: string;
+  est_minutes: number;
+  type: 'LAB' | 'CHALLENGE';
+  required: boolean;
+  status_for_user: 'NOT_STARTED' | 'RUNNING' | 'STOPPED';
+  instance_id?: string | null;
 }
+
+export interface ModuleDetail extends ModuleSummary {
+  lessons: LessonSummary[];
+  labs?: ModuleLabSummary[];
+}
+
+export type UserModuleCardDTO = ModuleSummary;
+export type UserModuleLessonDTO = LessonSummary;
+export type UserModuleDetailDTO = ModuleDetail;
 
 export type AdminModuleLevel = 'basic' | 'intermediate' | 'advanced';
 export type AdminModuleStatus = 'active' | 'locked' | 'draft';
@@ -140,28 +164,35 @@ export interface AdminLesson {
   updated_at?: string;
 }
 
-export interface AdminDashboardMetrics {
-  totalUsers: number;
-  activeLabInstances: number;
-  submissions24h: number;
-  failedJobs: number;
+export interface AdminOverviewTotals {
+  users: number;
+  active_lab_instances: number;
+  submissions_24h: number;
+  failed_jobs: number;
 }
 
-export interface AdminDashboardSubmissionPoint {
+export interface AdminOverviewSubmissionPoint {
   date: string;
+  day: string;
   count: number;
 }
 
-export interface AdminDashboardAuditLog {
+export interface AdminOverviewAuditLog {
   id: string | number;
-  tag: string;
-  message: string;
-  createdAt: string | null;
-  timeAgo?: string | null;
+  actor_name: string | null;
+  action: string;
+  entity_type: string;
+  entity_label: string;
+  created_at: string | null;
+  created_at_human: string | null;
 }
 
-export interface AdminDashboardOverview {
-  metrics: AdminDashboardMetrics;
-  flagSubmissionsLast7Days: AdminDashboardSubmissionPoint[];
-  recentAuditLogs: AdminDashboardAuditLog[];
+export interface AdminOverviewData {
+  totals: AdminOverviewTotals;
+  submissions_last_7_days: AdminOverviewSubmissionPoint[];
+  recent_audit_logs: AdminOverviewAuditLog[];
+}
+
+export interface AdminOverviewResponse {
+  data: AdminOverviewData;
 }

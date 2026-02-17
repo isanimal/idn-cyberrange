@@ -56,20 +56,33 @@ export const useLabMutations = (labId: string, onSuccess: () => void) => {
   const deactivate = async (instanceId: string) => {
      setIsActivating(true);
      try {
-       await labService.deactivateLab(instanceId, labId);
+       await labService.deactivateLab(instanceId);
        onSuccess();
      } finally {
        setIsActivating(false);
      }
   };
 
+  const restart = async (instanceId: string) => {
+    setIsActivating(true);
+    try {
+      await labService.restartLab(instanceId);
+      onSuccess();
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
   const updateNotes = async (notes: string) => {
+    if (!labId) {
+      return;
+    }
     await labService.updateInstance(labId, { notes });
     // Silent update, no full refetch needed usually, but for demo:
     onSuccess(); 
   };
 
-  return { activate, deactivate, updateNotes, isActivating };
+  return { activate, deactivate, restart, updateNotes, isActivating };
 };
 
 // --- ADMIN HOOKS ---

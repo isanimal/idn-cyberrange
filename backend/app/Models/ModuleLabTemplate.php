@@ -5,27 +5,25 @@ namespace App\Models;
 use App\Models\Concerns\UsesUuid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Lesson extends Model
+class ModuleLabTemplate extends Model
 {
     use UsesUuid;
 
+    protected $table = 'module_lab_templates';
+
     protected $fillable = [
         'module_id',
-        'title',
-        'content',
-        'content_markdown',
-        'content_md',
+        'lab_template_id',
         'order',
-        'order_index',
-        'is_active',
+        'type',
+        'required',
     ];
 
     protected function casts(): array
     {
         return [
-            'is_active' => 'boolean',
+            'required' => 'boolean',
         ];
     }
 
@@ -34,8 +32,9 @@ class Lesson extends Model
         return $this->belongsTo(Module::class);
     }
 
-    public function progress(): HasMany
+    public function labTemplate(): BelongsTo
     {
-        return $this->hasMany(UserLessonProgress::class, 'lesson_id');
+        return $this->belongsTo(LabTemplate::class, 'lab_template_id');
     }
 }
+

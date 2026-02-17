@@ -1,22 +1,24 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Card from '../components/UI/Card';
 import { Lock, Unlock, ArrowRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { UserModuleCardDTO } from '../types';
+import { useNavigate } from 'react-router-dom';
+import { ModuleSummary } from '../types';
 import { modulesApi } from '../services/modulesApi';
 
 const ModuleList: React.FC = () => {
-  const [modules, setModules] = useState<UserModuleCardDTO[]>([]);
+  const navigate = useNavigate();
+  const [modules, setModules] = useState<ModuleSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [startingModuleId, setStartingModuleId] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       setError('');
       try {
-        const data = await modulesApi.list();
+        const data = await modulesApi.listModules();
         setModules(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load modules.');
@@ -33,12 +35,29 @@ const ModuleList: React.FC = () => {
     if (!q) return modules;
     return modules.filter((module) =>
       module.title.toLowerCase().includes(q) ||
-      (module.description ?? '').toLowerCase().includes(q),
+      (module.description ?? '').toLowerCase().includes(q) ||
+      module.tags.some((tag) => tag.toLowerCase().includes(q)),
     );
   }, [modules, search]);
 
-  const levelLabel = (level: UserModuleCardDTO['level']) => {
-    return level === 'BASIC' ? 'Basic' : level === 'INTERMEDIATE' ? 'Intermediate' : 'Advanced';
+  const levelLabel = (difficulty: ModuleSummary['difficulty']) => {
+    return difficulty === 'BASIC' ? 'Basic' : difficulty === 'INTERMEDIATE' ? 'Intermediate' : 'Advanced';
+  };
+
+  const onStartModule = async (module: ModuleSummary) => {
+    if (module.is_locked) {
+      return;
+    }
+
+    try {
+      setStartingModuleId(module.id);
+      await modulesApi.startModule(module.slug);
+      navigate(`/modules/${module.slug}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start module.');
+    } finally {
+      setStartingModuleId(null);
+    }
   };
 
   return (
@@ -64,51 +83,76 @@ const ModuleList: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {isLoading ? (
-          <div className="col-span-full text-slate-500">Loading modules...</div>
+          <div className="col-span-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="h-[260px] animate-pulse">
+                <div className="h-4 w-20 bg-slate-200 dark:bg-slate-700 rounded mb-4" />
+                <div className="h-6 w-2/3 bg-slate-200 dark:bg-slate-700 rounded mb-3" />
+                <div className="h-4 w-full bg-slate-200 dark:bg-slate-700 rounded mb-2" />
+                <div className="h-4 w-5/6 bg-slate-200 dark:bg-slate-700 rounded mb-6" />
+                <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded" />
+              </Card>
+            ))}
+          </div>
         ) : filteredModules.length === 0 ? (
-          <div className="col-span-full text-slate-500">No modules found.</div>
+          <Card className="col-span-full">
+            <div className="text-slate-500 dark:text-slate-400 text-sm">No modules published.</div>
+          </Card>
         ) : filteredModules.map((module) => (
           <div key={module.id} className={`relative ${module.is_locked ? 'opacity-70 grayscale' : ''}`}>
-             <Link to={module.is_locked ? '#' : `/modules/${module.slug}`}>
-              <Card className="h-full hover:border-idn-500 dark:hover:border-idn-500 hover:shadow-lg transition-all hover:-translate-y-1 cursor-pointer">
-                <div className="flex justify-between items-start mb-4">
-                  <span className={`px-2 py-1 rounded text-xs font-bold ${
-                    module.level === 'BASIC' ? 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400' :
-                    module.level === 'INTERMEDIATE' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-500/20 dark:text-yellow-400' :
-                    'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400'
-                  }`}>
-                    {levelLabel(module.level)}
-                  </span>
-                  {module.is_locked ? <Lock size={18} className="text-slate-400" /> : <Unlock size={18} className="text-idn-500" />}
+            <Card className="h-full hover:border-idn-500 dark:hover:border-idn-500 hover:shadow-lg transition-all hover:-translate-y-1">
+              <div className="flex justify-between items-start mb-4">
+                <span className={`px-2 py-1 rounded text-xs font-bold ${
+                  module.difficulty === 'BASIC' ? 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400' :
+                  module.difficulty === 'INTERMEDIATE' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-500/20 dark:text-yellow-400' :
+                  'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400'
+                }`}>
+                  {levelLabel(module.difficulty)}
+                </span>
+                {module.is_locked ? <Lock size={18} className="text-slate-400" /> : <Unlock size={18} className="text-idn-500" />}
+              </div>
+
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">{module.title}</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm mb-4 line-clamp-2">{module.description ?? 'No description yet.'}</p>
+
+              {module.tags.length > 0 && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {module.tags.slice(0, 3).map((tag) => (
+                    <span key={tag} className="text-[11px] px-2 py-1 rounded bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      #{tag}
+                    </span>
+                  ))}
                 </div>
-                
-                <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">{module.title}</h3>
-                <p className="text-slate-500 dark:text-slate-400 text-sm mb-6 line-clamp-2">{module.description ?? 'No description yet.'}</p>
-                
-                <div className="mt-auto">
-                  <div className="flex justify-between text-xs text-slate-500 mb-2">
-                    <span>Progress</span>
-                    <span>{module.progress_percent}%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-1.5">
-                    <div 
-                      className={`h-1.5 rounded-full transition-all duration-500 ${module.progress_percent === 100 ? 'bg-green-500' : 'bg-idn-500'}`} 
-                      style={{ width: `${module.progress_percent}%` }}
-                    ></div>
-                  </div>
-                  
-                  {!module.is_locked ? (
-                    <div className="mt-4 flex justify-end text-idn-600 dark:text-idn-400 text-sm font-semibold flex items-center gap-1">
-                      Start Module <ArrowRight size={16} />
-                    </div>
-                  ) : (
-                    <div className="mt-4 flex justify-end text-slate-500 text-sm font-semibold">
-                      Locked
-                    </div>
-                  )}
+              )}
+
+              <div className="mt-auto">
+                <div className="flex justify-between text-xs text-slate-500 mb-2">
+                  <span>Progress</span>
+                  <span>{module.progress_percent}%</span>
                 </div>
-              </Card>
-            </Link>
+                <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-1.5">
+                  <div
+                    className={`h-1.5 rounded-full transition-all duration-500 ${module.progress_percent === 100 ? 'bg-green-500' : 'bg-idn-500'}`}
+                    style={{ width: `${module.progress_percent}%` }}
+                  />
+                </div>
+
+                {!module.is_locked ? (
+                  <button
+                    type="button"
+                    className="mt-4 w-full flex justify-center text-idn-600 dark:text-idn-400 text-sm font-semibold items-center gap-1 disabled:opacity-60"
+                    disabled={startingModuleId === module.id}
+                    onClick={() => void onStartModule(module)}
+                  >
+                    {startingModuleId === module.id ? 'Starting...' : 'Start Module'} <ArrowRight size={16} />
+                  </button>
+                ) : (
+                  <div className="mt-4 flex justify-end text-slate-500 text-sm font-semibold">
+                    Locked
+                  </div>
+                )}
+              </div>
+            </Card>
           </div>
         ))}
       </div>

@@ -45,6 +45,11 @@ class User extends Authenticatable
 
     public function moduleProgress(): HasMany
     {
-        return $this->hasMany(ModuleProgress::class);
+        return $this->hasMany(UserModuleProgress::class);
+    }
+
+    public function lessonProgress(): HasMany
+    {
+        return $this->hasMany(UserLessonProgress::class);
     }
 }

@@ -2,10 +2,9 @@
 
 namespace App\Models;
 
-use App\Enums\ModuleLevel;
-use App\Enums\ModuleStatus;
 use App\Models\Concerns\UsesUuid;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
@@ -17,6 +16,14 @@ class Module extends Model
         'title',
         'slug',
         'description',
+        'difficulty',
+        'category',
+        'est_minutes',
+        'version',
+        'tags',
+        'cover_icon',
+        'created_by',
+        'archived_at',
         'level',
         'status',
         'order_index',
@@ -25,8 +32,9 @@ class Module extends Model
     protected function casts(): array
     {
         return [
-            'level' => ModuleLevel::class,
-            'status' => ModuleStatus::class,
+            'tags' => 'array',
+            'est_minutes' => 'integer',
+            'archived_at' => 'datetime',
         ];
     }
 
@@ -35,13 +43,23 @@ class Module extends Model
         return $this->hasMany(Lesson::class);
     }
 
+    public function moduleLabTemplates(): HasMany
+    {
+        return $this->hasMany(ModuleLabTemplate::class);
+    }
+
     public function progress(): HasMany
     {
-        return $this->hasMany(ModuleProgress::class);
+        return $this->hasMany(UserModuleProgress::class);
     }
 
     public function userProgress(): HasOne
     {
-        return $this->hasOne(ModuleProgress::class);
+        return $this->hasOne(UserModuleProgress::class);
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

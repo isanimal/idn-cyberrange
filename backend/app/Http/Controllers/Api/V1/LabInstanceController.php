@@ -17,6 +17,22 @@ class LabInstanceController extends Controller
     {
     }
 
+    public function store(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'lab_template_id' => ['required', 'string', 'exists:lab_templates,id'],
+            'pin_version' => ['nullable', 'string', 'max:32'],
+        ]);
+
+        $instance = $this->instances->activate(
+            $validated['lab_template_id'],
+            $request->user(),
+            $validated['pin_version'] ?? null
+        );
+
+        return response()->json(['data' => new LabInstanceResource($instance->load('template'))], 201);
+    }
+
     public function activate(ActivateLabRequest $request, string $id): JsonResponse
     {
         $instance = $this->instances->activate(
@@ -25,7 +41,7 @@ class LabInstanceController extends Controller
             $request->validated('pin_version')
         );
 
-        return response()->json(new LabInstanceResource($instance), 201);
+        return response()->json(new LabInstanceResource($instance->load('template')), 201);
     }
 
     public function start(ActivateLabRequest $request, string $id): JsonResponse
@@ -37,21 +53,26 @@ class LabInstanceController extends Controller
     {
         $instance = $this->instances->deactivate($instance_id, $request->user());
 
-        return response()->json(new LabInstanceResource($instance));
+        return response()->json(new LabInstanceResource($instance->load('template')));
     }
 
     public function restart(Request $request, string $instance_id): JsonResponse
     {
         $instance = $this->instances->restart($instance_id, $request->user());
 
-        return response()->json(new LabInstanceResource($instance));
+        return response()->json(new LabInstanceResource($instance->load('template')));
+    }
+
+    public function stop(Request $request, string $instance_id): JsonResponse
+    {
+        return $this->deactivate($request, $instance_id);
     }
 
     public function update(UpdateLabInstanceRequest $request, string $instance_id): JsonResponse
     {
         $instance = $this->instances->updateInstance($instance_id, $request->user(), $request->validated());
 
-        return response()->json(new LabInstanceResource($instance));
+        return response()->json(new LabInstanceResource($instance->load('template')));
     }
 
     public function upgrade(UpgradeLabInstanceRequest $request, string $instance_id): JsonResponse
@@ -68,7 +89,7 @@ class LabInstanceController extends Controller
             $request->user(),
         );
 
-        return response()->json(new LabInstanceResource($instance));
+        return response()->json(new LabInstanceResource($instance->load('template')));
     }
 
     public function myInstances(Request $request): JsonResponse
@@ -76,14 +97,39 @@ class LabInstanceController extends Controller
         $result = $this->instances->myInstances($request->user(), [
             'state' => $request->query('state'),
         ], (int) $request->integer('limit', 15));
+        $items = collect($result->items())->each(fn ($instance) => $instance->load('template'));
 
         return response()->json([
-            'data' => LabInstanceResource::collection($result->items()),
+            'data' => LabInstanceResource::collection($items),
             'meta' => [
                 'current_page' => $result->currentPage(),
                 'last_page' => $result->lastPage(),
                 'total' => $result->total(),
             ],
         ]);
+    }
+
+    public function my(Request $request): JsonResponse
+    {
+        $result = $this->instances->myInstances($request->user(), [
+            'state' => $request->query('state'),
+        ], (int) $request->integer('limit', 20));
+        $items = collect($result->items())->each(fn ($instance) => $instance->load('template'));
+
+        return response()->json([
+            'data' => LabInstanceResource::collection($items),
+            'meta' => [
+                'current_page' => $result->currentPage(),
+                'last_page' => $result->lastPage(),
+                'total' => $result->total(),
+            ],
+        ]);
+    }
+
+    public function show(Request $request, string $instance_id): JsonResponse
+    {
+        $instance = $this->instances->findInstanceForUserOrFail($instance_id, $request->user());
+
+        return response()->json(['data' => new LabInstanceResource($instance->load('template'))]);
     }
 }

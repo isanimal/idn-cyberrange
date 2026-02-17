@@ -8,7 +8,8 @@ import { Play, Pause, AlertTriangle, CheckCircle, Terminal, RotateCcw, Save } fr
 const LabDetail: React.FC = () => {
   const { id } = useParams();
   const { data: lab, isLoading, refetch } = useLabDetail(id || '');
-  const { activate, deactivate, updateNotes, isActivating } = useLabMutations(lab?.id || '', refetch);
+  const instanceId = lab?.user_instance?.instance_id ?? '';
+  const { activate, deactivate, restart, updateNotes, isActivating } = useLabMutations(instanceId, refetch);
   const [notes, setNotes] = useState('');
 
   if (isLoading || !lab) return <div className="p-8">Loading...</div>;
@@ -97,9 +98,9 @@ const LabDetail: React.FC = () => {
                 {instance.state === 'ACTIVE' ? (
                   <>
                     <div className="bg-slate-900 rounded p-3 font-mono text-xs text-green-400 mb-4 break-all">
-                      target: 10.10.14.5<br/>
-                      port: 8080<br/>
-                      vpn: connected
+                      target: {instance.gateway || 'n/a'}<br/>
+                      port: {instance.assigned_port || '-'}<br/>
+                      url: {instance.connection_url || instance.access_urls?.[0]?.url || '-'}
                     </div>
                     <button 
                       onClick={() => deactivate(instance.instance_id)}
@@ -112,12 +113,15 @@ const LabDetail: React.FC = () => {
                     </button>
                   </>
                 ) : (
-                  <button className="w-full bg-idn-500 hover:bg-idn-600 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2">
-                    <Play size={18} /> Resume Lab
-                  </button>
+                <button onClick={activate} className="w-full bg-idn-500 hover:bg-idn-600 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2">
+                  <Play size={18} /> Resume Lab
+                </button>
                 )}
                 
-                <button className="w-full border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold py-2 rounded-lg flex items-center justify-center gap-2">
+                <button
+                  onClick={() => instance && restart(instance.instance_id)}
+                  className="w-full border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold py-2 rounded-lg flex items-center justify-center gap-2"
+                >
                   <RotateCcw size={16} /> Restart
                 </button>
               </div>

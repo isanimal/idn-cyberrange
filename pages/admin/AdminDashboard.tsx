@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Card from '../../components/UI/Card';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Users, Server, AlertTriangle, Activity } from 'lucide-react';
-import { AdminDashboardOverview } from '../../types';
+import { AdminOverviewData } from '../../types';
 import { adminDashboardApi } from '../../services/adminDashboardApi';
 
 interface ChartRow {
@@ -11,17 +11,16 @@ interface ChartRow {
 }
 
 const formatter = new Intl.NumberFormat('en-US');
-const dayLabelFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'short' });
 
-const EMPTY_OVERVIEW: AdminDashboardOverview = {
-  metrics: {
-    totalUsers: 0,
-    activeLabInstances: 0,
-    submissions24h: 0,
-    failedJobs: 0,
+const EMPTY_OVERVIEW: AdminOverviewData = {
+  totals: {
+    users: 0,
+    active_lab_instances: 0,
+    submissions_24h: 0,
+    failed_jobs: 0,
   },
-  flagSubmissionsLast7Days: [],
-  recentAuditLogs: [],
+  submissions_last_7_days: [],
+  recent_audit_logs: [],
 };
 
 const buildEmptyChartPoints = (): ChartRow[] => {
@@ -30,7 +29,7 @@ const buildEmptyChartPoints = (): ChartRow[] => {
     const date = new Date();
     date.setDate(date.getDate() - i);
     rows.push({
-      name: dayLabelFormatter.format(date),
+      name: date.toLocaleDateString('en-US', { weekday: 'short' }),
       submissions: 0,
     });
   }
@@ -38,7 +37,7 @@ const buildEmptyChartPoints = (): ChartRow[] => {
 };
 
 const AdminDashboard: React.FC = () => {
-  const [overview, setOverview] = useState<AdminDashboardOverview>(EMPTY_OVERVIEW);
+  const [overview, setOverview] = useState<AdminOverviewData>(EMPTY_OVERVIEW);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,19 +76,19 @@ const AdminDashboard: React.FC = () => {
 
   const chartData = useMemo<ChartRow[]>(
     () => {
-      if (overview.flagSubmissionsLast7Days.length === 0) {
+      if (overview.submissions_last_7_days.length === 0) {
         return buildEmptyChartPoints();
       }
 
-      return overview.flagSubmissionsLast7Days.map((point) => ({
-        name: dayLabelFormatter.format(new Date(point.date)),
+      return overview.submissions_last_7_days.map((point) => ({
+        name: point.day,
         submissions: point.count,
       }));
     },
-    [overview.flagSubmissionsLast7Days],
+    [overview.submissions_last_7_days],
   );
 
-  const metrics = overview.metrics;
+  const totals = overview.totals;
 
   return (
     <div className="space-y-6">
@@ -108,7 +107,7 @@ const AdminDashboard: React.FC = () => {
             <div>
               <p className="text-slate-500 dark:text-slate-400 text-sm">Total Users</p>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-white">
-                {loading ? '...' : formatter.format(metrics.totalUsers)}
+                {loading ? '...' : formatter.format(totals.users)}
               </h3>
             </div>
           </div>
@@ -121,7 +120,7 @@ const AdminDashboard: React.FC = () => {
             <div>
               <p className="text-slate-500 dark:text-slate-400 text-sm">Active Lab Instances</p>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-white">
-                {loading ? '...' : formatter.format(metrics.activeLabInstances)}
+                {loading ? '...' : formatter.format(totals.active_lab_instances)}
               </h3>
             </div>
           </div>
@@ -134,7 +133,7 @@ const AdminDashboard: React.FC = () => {
             <div>
               <p className="text-slate-500 dark:text-slate-400 text-sm">Submissions (24h)</p>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-white">
-                {loading ? '...' : formatter.format(metrics.submissions24h)}
+                {loading ? '...' : formatter.format(totals.submissions_24h)}
               </h3>
             </div>
           </div>
@@ -147,7 +146,7 @@ const AdminDashboard: React.FC = () => {
             <div>
               <p className="text-slate-500 dark:text-slate-400 text-sm">Failed Jobs</p>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-white">
-                {loading ? '...' : formatter.format(metrics.failedJobs)}
+                {loading ? '...' : formatter.format(totals.failed_jobs)}
               </h3>
             </div>
           </div>
@@ -174,21 +173,21 @@ const AdminDashboard: React.FC = () => {
 
         <Card title="Recent Audit Logs">
           <div className="space-y-4 mt-2">
-            {overview.recentAuditLogs.length === 0 && !loading ? (
+            {overview.recent_audit_logs.length === 0 && !loading ? (
               <div className="text-sm text-slate-500 dark:text-slate-400">No logs yet</div>
             ) : (
-              overview.recentAuditLogs.map((log) => (
+              overview.recent_audit_logs.map((log) => (
                 <div
                   key={String(log.id)}
                   className="flex justify-between items-center text-sm border-b border-slate-100 dark:border-slate-800 pb-2 last:border-0"
                 >
                   <div>
                     <span className="font-mono text-xs text-idn-600 dark:text-idn-400 mr-2 bg-idn-50 dark:bg-idn-900/30 px-1.5 py-0.5 rounded">
-                      [{log.tag}]
+                      [{(log.actor_name || 'ADMIN').toUpperCase()}]
                     </span>
-                    <span className="text-slate-700 dark:text-slate-300">{log.message}</span>
+                    <span className="text-slate-700 dark:text-slate-300">{log.entity_label}</span>
                   </div>
-                  <span className="text-slate-400 text-xs">{log.timeAgo ?? '-'}</span>
+                  <span className="text-slate-400 text-xs">{log.created_at_human ?? '-'}</span>
                 </div>
               ))
             )}

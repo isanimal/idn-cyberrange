@@ -2,12 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Enums\ModuleLevel;
-use App\Enums\ModuleStatus;
 use App\Models\Lesson;
 use App\Models\Module;
-use App\Models\ModuleProgress;
 use App\Models\User;
+use App\Models\UserModuleProgress;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -15,7 +13,7 @@ class UserModuleApiTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_authenticated_user_can_list_modules_with_progress(): void
+    public function test_user_list_modules_returns_progress_and_locked_fields(): void
     {
         $user = User::factory()->create();
 
@@ -23,8 +21,9 @@ class UserModuleApiTest extends TestCase
             'title' => 'M1',
             'slug' => 'm1',
             'description' => 'd1',
-            'level' => ModuleLevel::BASIC,
-            'status' => ModuleStatus::ACTIVE,
+            'difficulty' => 'BASIC',
+            'level' => 'basic',
+            'status' => 'active',
             'order_index' => 1,
         ]);
 
@@ -32,24 +31,30 @@ class UserModuleApiTest extends TestCase
             'title' => 'M2',
             'slug' => 'm2',
             'description' => 'd2',
-            'level' => ModuleLevel::INTERMEDIATE,
-            'status' => ModuleStatus::ACTIVE,
+            'difficulty' => 'INTERMEDIATE',
+            'level' => 'intermediate',
+            'status' => 'active',
             'order_index' => 2,
         ]);
 
         Lesson::query()->create([
             'module_id' => $m1->id,
             'title' => 'L1',
-            'content' => '# L1',
+            'content_md' => '# L1',
             'content_markdown' => '# L1',
+            'content' => '# L1',
+            'order' => 1,
             'order_index' => 1,
+            'is_active' => true,
         ]);
 
-        ModuleProgress::query()->create([
+        UserModuleProgress::query()->create([
             'user_id' => $user->id,
             'module_id' => $m1->id,
             'progress_percent' => 100,
-            'is_completed' => true,
+            'started_at' => now()->subHour(),
+            'completed_at' => now()->subMinutes(5),
+            'last_accessed_at' => now(),
         ]);
 
         $this->actingAs($user, 'sanctum')
@@ -57,36 +62,77 @@ class UserModuleApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.0.slug', 'm1')
             ->assertJsonPath('data.0.progress_percent', 100)
-            ->assertJsonPath('data.0.lessons_count', 1)
+            ->assertJsonPath('data.0.is_locked', false)
             ->assertJsonPath('data.1.slug', 'm2')
             ->assertJsonPath('data.1.is_locked', false);
+
+        UserModuleProgress::query()
+            ->where('user_id', $user->id)
+            ->where('module_id', $m1->id)
+            ->update(['progress_percent' => 40, 'completed_at' => null]);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/v1/modules')
+            ->assertOk()
+            ->assertJsonPath('data.1.slug', 'm2')
+            ->assertJsonPath('data.1.is_locked', true);
     }
 
-    public function test_authenticated_user_can_get_module_detail(): void
+    public function test_marking_lesson_complete_recalculates_module_progress(): void
     {
         $user = User::factory()->create();
+
         $module = Module::query()->create([
-            'title' => 'M1',
-            'slug' => 'm1',
+            'title' => 'Web 101',
+            'slug' => 'web-101',
             'description' => 'd1',
-            'level' => ModuleLevel::BASIC,
-            'status' => ModuleStatus::ACTIVE,
+            'difficulty' => 'BASIC',
+            'level' => 'basic',
+            'status' => 'active',
             'order_index' => 1,
         ]);
 
-        Lesson::query()->create([
+        $lesson1 = Lesson::query()->create([
             'module_id' => $module->id,
             'title' => 'Lesson 1',
-            'content' => '# Lesson',
-            'content_markdown' => '# Lesson',
+            'content_md' => '# L1',
+            'content_markdown' => '# L1',
+            'content' => '# L1',
+            'order' => 1,
             'order_index' => 1,
+            'is_active' => true,
+        ]);
+
+        $lesson2 = Lesson::query()->create([
+            'module_id' => $module->id,
+            'title' => 'Lesson 2',
+            'content_md' => '# L2',
+            'content_markdown' => '# L2',
+            'content' => '# L2',
+            'order' => 2,
+            'order_index' => 2,
+            'is_active' => true,
         ]);
 
         $this->actingAs($user, 'sanctum')
-            ->getJson('/api/v1/modules/m1')
+            ->postJson('/api/v1/modules/web-101/start')
             ->assertOk()
-            ->assertJsonPath('slug', 'm1')
-            ->assertJsonPath('lessons.0.title', 'Lesson 1');
+            ->assertJsonPath('data.progress_percent', 0);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/modules/web-101/lessons/'.$lesson1->id.'/complete')
+            ->assertOk()
+            ->assertJsonPath('data.progress_percent', 50);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/modules/web-101/lessons/'.$lesson2->id.'/complete')
+            ->assertOk()
+            ->assertJsonPath('data.progress_percent', 100);
+
+        $this->assertDatabaseHas('user_module_progress', [
+            'user_id' => $user->id,
+            'module_id' => $module->id,
+            'progress_percent' => 100,
+        ]);
     }
 }
-

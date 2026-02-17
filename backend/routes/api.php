@@ -23,6 +23,8 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/me', [AuthController::class, 'me']);
         Route::get('/modules', [UserModuleController::class, 'index']);
         Route::get('/modules/{slug}', [UserModuleController::class, 'show']);
+        Route::post('/modules/{slug}/start', [UserModuleController::class, 'start']);
+        Route::post('/modules/{slug}/lessons/{lessonId}/complete', [UserModuleController::class, 'completeLesson']);
 
         Route::get('/labs', [LabController::class, 'index']);
         Route::get('/labs/{id_or_slug}', [LabController::class, 'show']);
@@ -31,6 +33,10 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/labs/{id}/challenges', [ChallengeController::class, 'listByLab']);
 
         Route::get('/me/lab-instances', [LabInstanceController::class, 'myInstances']);
+        Route::post('/lab-instances', [LabInstanceController::class, 'store']);
+        Route::get('/lab-instances/my', [LabInstanceController::class, 'my']);
+        Route::get('/lab-instances/{instance_id}', [LabInstanceController::class, 'show']);
+        Route::post('/lab-instances/{instance_id}/stop', [LabInstanceController::class, 'stop']);
         Route::post('/lab-instances/{instance_id}/deactivate', [LabInstanceController::class, 'deactivate']);
         Route::post('/lab-instances/{instance_id}/restart', [LabInstanceController::class, 'restart']);
         Route::patch('/lab-instances/{instance_id}', [LabInstanceController::class, 'update']);
@@ -40,6 +46,7 @@ Route::prefix('v1')->group(function (): void {
             ->middleware('throttle:challenge-submission');
 
         Route::prefix('admin')->middleware('role:ADMIN')->group(function (): void {
+            Route::get('/overview', [DashboardController::class, 'adminOverview']);
             Route::get('/dashboard/overview', [DashboardController::class, 'overview']);
             Route::get('/labs', [AdminLabController::class, 'index']);
             Route::post('/labs', [AdminLabController::class, 'store']);
@@ -70,6 +77,13 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/modules/{id}/lessons', [AdminModuleController::class, 'storeLesson']);
             Route::patch('/modules/{id}/lessons/{lesson_id}', [AdminModuleController::class, 'updateLesson']);
             Route::delete('/modules/{id}/lessons/{lesson_id}', [AdminModuleController::class, 'destroyLesson']);
+            Route::get('/modules/{id}/lab-templates', [AdminModuleController::class, 'listLabTemplates']);
+            Route::post('/modules/{id}/lab-templates', [AdminModuleController::class, 'storeLabTemplate']);
+            Route::delete('/modules/{id}/lab-templates/{linkId}', [AdminModuleController::class, 'destroyLabTemplate']);
+            Route::patch('/lessons/{id}', [AdminModuleController::class, 'updateLessonById']);
+            Route::delete('/lessons/{id}', [AdminModuleController::class, 'destroyLessonById']);
+            Route::post('/modules/{id}/publish', [AdminModuleController::class, 'publish']);
+            Route::post('/modules/{id}/archive', [AdminModuleController::class, 'archive']);
 
             Route::get('/orchestration/instances', [AdminOrchestrationController::class, 'index']);
             Route::post('/orchestration/instances/{instance_id}/force-stop', [AdminOrchestrationController::class, 'forceStop']);
