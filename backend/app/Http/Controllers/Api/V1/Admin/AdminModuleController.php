@@ -7,6 +7,8 @@ use App\Http\Requests\Admin\StoreLessonRequest;
 use App\Http\Requests\Admin\StoreModuleRequest;
 use App\Http\Requests\Admin\UpdateLessonRequest;
 use App\Http\Requests\Admin\UpdateModuleRequest;
+use App\Models\LessonAsset;
+use App\Models\LessonTask;
 use App\Models\Lesson;
 use App\Models\Module;
 use App\Models\ModuleLabTemplate;
@@ -91,7 +93,7 @@ class AdminModuleController extends Controller
     public function show(string $id): JsonResponse
     {
         $module = Module::query()
-            ->with(['lessons' => fn ($q) => $q->orderBy('order')])
+            ->with(['lessons' => fn ($q) => $q->with(['tasks', 'assets'])->orderBy('order')])
             ->withCount('lessons')
             ->findOrFail($id);
 
@@ -198,12 +200,31 @@ class AdminModuleController extends Controller
         $module = Module::query()->findOrFail($moduleId);
 
         $lessons = $module->lessons()
+            ->with([
+                'tasks' => fn ($q) => $q->orderBy('order_index'),
+                'assets' => fn ($q) => $q->orderBy('order_index'),
+            ])
             ->orderBy('order')
             ->get()
             ->map(fn (Lesson $lesson): array => $this->transformLesson($lesson))
             ->values();
 
         return response()->json(['data' => $lessons]);
+    }
+
+    public function showLesson(string $moduleId, string $lessonId): JsonResponse
+    {
+        $module = Module::query()->findOrFail($moduleId);
+
+        $lesson = $module->lessons()
+            ->with([
+                'tasks' => fn ($q) => $q->orderBy('order_index'),
+                'assets' => fn ($q) => $q->orderBy('order_index'),
+            ])
+            ->where('id', $lessonId)
+            ->firstOrFail();
+
+        return response()->json(['data' => $this->transformLesson($lesson)]);
     }
 
     public function storeLesson(StoreLessonRequest $request, string $moduleId): JsonResponse
@@ -225,7 +246,7 @@ class AdminModuleController extends Controller
             'message' => 'Created lesson "'.$lesson->title.'" for module "'.$module->title.'"',
         ]);
 
-        return response()->json($this->transformLesson($lesson), Response::HTTP_CREATED);
+        return response()->json($this->transformLesson($lesson->load(['tasks', 'assets'])), Response::HTTP_CREATED);
     }
 
     public function updateLesson(UpdateLessonRequest $request, string $moduleId, string $lessonId): JsonResponse
@@ -267,6 +288,164 @@ class AdminModuleController extends Controller
 
         $this->audit->log('LESSON_DELETED', (string) request()->user()?->id, 'lesson', $id, [
             'message' => 'Deleted lesson "'.$lessonTitle.'" from module "'.$moduleTitle.'"',
+        ]);
+
+        return response()->json(null, Response::HTTP_NO_CONTENT);
+    }
+
+    public function storeTask(Request $request, string $lessonId): JsonResponse
+    {
+        $lesson = Lesson::query()->with('module')->findOrFail($lessonId);
+        $validated = $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+            'order_index' => ['required', 'integer', 'min:1'],
+            'points' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $task = LessonTask::query()->create([
+            'lesson_id' => $lesson->id,
+            'title' => $validated['title'],
+            'order_index' => (int) $validated['order_index'],
+            'points' => array_key_exists('points', $validated) ? $validated['points'] : null,
+        ]);
+
+        $this->audit->log('LESSON_TASK_CREATED', (string) $request->user()?->id, 'lesson_task', $task->id, [
+            'message' => 'Created task for lesson "'.$lesson->title.'"',
+        ]);
+
+        return response()->json([
+            'data' => [
+                'id' => $task->id,
+                'lesson_id' => $task->lesson_id,
+                'title' => $task->title,
+                'order_index' => (int) $task->order_index,
+                'points' => $task->points !== null ? (int) $task->points : null,
+                'created_at' => $task->created_at?->toISOString(),
+                'updated_at' => $task->updated_at?->toISOString(),
+            ],
+        ], Response::HTTP_CREATED);
+    }
+
+    public function updateTask(Request $request, string $taskId): JsonResponse
+    {
+        $task = LessonTask::query()->with('lesson')->findOrFail($taskId);
+        $validated = $request->validate([
+            'title' => ['sometimes', 'string', 'max:255'],
+            'order_index' => ['sometimes', 'integer', 'min:1'],
+            'points' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $task->fill($validated);
+        $task->save();
+
+        $this->audit->log('LESSON_TASK_UPDATED', (string) $request->user()?->id, 'lesson_task', $task->id, [
+            'message' => 'Updated task "'.$task->title.'"',
+        ]);
+
+        return response()->json([
+            'data' => [
+                'id' => $task->id,
+                'lesson_id' => $task->lesson_id,
+                'title' => $task->title,
+                'order_index' => (int) $task->order_index,
+                'points' => $task->points !== null ? (int) $task->points : null,
+                'created_at' => $task->created_at?->toISOString(),
+                'updated_at' => $task->updated_at?->toISOString(),
+            ],
+        ]);
+    }
+
+    public function destroyTask(Request $request, string $taskId): JsonResponse
+    {
+        $task = LessonTask::query()->findOrFail($taskId);
+        $taskTitle = $task->title;
+        $task->delete();
+
+        $this->audit->log('LESSON_TASK_DELETED', (string) $request->user()?->id, 'lesson_task', $taskId, [
+            'message' => 'Deleted task "'.$taskTitle.'"',
+        ]);
+
+        return response()->json(null, Response::HTTP_NO_CONTENT);
+    }
+
+    public function storeAsset(Request $request, string $lessonId): JsonResponse
+    {
+        $lesson = Lesson::query()->findOrFail($lessonId);
+        $validated = $request->validate([
+            'type' => ['nullable', 'string', 'in:IMAGE'],
+            'url' => ['required', 'url', 'max:2048'],
+            'caption' => ['nullable', 'string', 'max:255'],
+            'order_index' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $asset = LessonAsset::query()->create([
+            'lesson_id' => $lesson->id,
+            'type' => strtoupper((string) ($validated['type'] ?? 'IMAGE')),
+            'url' => $validated['url'],
+            'caption' => $validated['caption'] ?? null,
+            'order_index' => (int) $validated['order_index'],
+        ]);
+
+        $this->audit->log('LESSON_ASSET_CREATED', (string) $request->user()?->id, 'lesson_asset', $asset->id, [
+            'message' => 'Added asset to lesson "'.$lesson->title.'"',
+        ]);
+
+        return response()->json([
+            'data' => [
+                'id' => $asset->id,
+                'lesson_id' => $asset->lesson_id,
+                'type' => strtoupper((string) $asset->type),
+                'url' => $asset->url,
+                'caption' => $asset->caption,
+                'order_index' => (int) $asset->order_index,
+                'created_at' => $asset->created_at?->toISOString(),
+                'updated_at' => $asset->updated_at?->toISOString(),
+            ],
+        ], Response::HTTP_CREATED);
+    }
+
+    public function updateAsset(Request $request, string $assetId): JsonResponse
+    {
+        $asset = LessonAsset::query()->findOrFail($assetId);
+        $validated = $request->validate([
+            'type' => ['sometimes', 'string', 'in:IMAGE'],
+            'url' => ['sometimes', 'url', 'max:2048'],
+            'caption' => ['nullable', 'string', 'max:255'],
+            'order_index' => ['sometimes', 'integer', 'min:1'],
+        ]);
+
+        if (array_key_exists('type', $validated)) {
+            $validated['type'] = strtoupper((string) $validated['type']);
+        }
+
+        $asset->fill($validated);
+        $asset->save();
+
+        $this->audit->log('LESSON_ASSET_UPDATED', (string) $request->user()?->id, 'lesson_asset', $asset->id, [
+            'message' => 'Updated lesson asset',
+        ]);
+
+        return response()->json([
+            'data' => [
+                'id' => $asset->id,
+                'lesson_id' => $asset->lesson_id,
+                'type' => strtoupper((string) $asset->type),
+                'url' => $asset->url,
+                'caption' => $asset->caption,
+                'order_index' => (int) $asset->order_index,
+                'created_at' => $asset->created_at?->toISOString(),
+                'updated_at' => $asset->updated_at?->toISOString(),
+            ],
+        ]);
+    }
+
+    public function destroyAsset(Request $request, string $assetId): JsonResponse
+    {
+        $asset = LessonAsset::query()->findOrFail($assetId);
+        $asset->delete();
+
+        $this->audit->log('LESSON_ASSET_DELETED', (string) $request->user()?->id, 'lesson_asset', $assetId, [
+            'message' => 'Deleted lesson asset',
         ]);
 
         return response()->json(null, Response::HTTP_NO_CONTENT);
@@ -394,7 +573,7 @@ class AdminModuleController extends Controller
             'message' => 'Updated lesson "'.$lesson->title.'" in module "'.$moduleTitle.'"',
         ]);
 
-        return response()->json($this->transformLesson($lesson->fresh()));
+        return response()->json($this->transformLesson($lesson->fresh()->load(['tasks', 'assets'])));
     }
 
     private function transformModule(Module $module): array
@@ -431,6 +610,29 @@ class AdminModuleController extends Controller
             'order' => (int) ($lesson->order ?? $lesson->order_index ?? 1),
             'order_index' => (int) ($lesson->order ?? $lesson->order_index ?? 1),
             'is_active' => (bool) ($lesson->is_active ?? true),
+            'tasks' => $lesson->relationLoaded('tasks')
+                ? $lesson->tasks->map(fn (LessonTask $task): array => [
+                    'id' => $task->id,
+                    'lesson_id' => $task->lesson_id,
+                    'title' => $task->title,
+                    'order_index' => (int) $task->order_index,
+                    'points' => $task->points !== null ? (int) $task->points : null,
+                    'created_at' => $task->created_at?->toISOString(),
+                    'updated_at' => $task->updated_at?->toISOString(),
+                ])->values()
+                : [],
+            'assets' => $lesson->relationLoaded('assets')
+                ? $lesson->assets->map(fn (LessonAsset $asset): array => [
+                    'id' => $asset->id,
+                    'lesson_id' => $asset->lesson_id,
+                    'type' => strtoupper((string) $asset->type),
+                    'url' => $asset->url,
+                    'caption' => $asset->caption,
+                    'order_index' => (int) $asset->order_index,
+                    'created_at' => $asset->created_at?->toISOString(),
+                    'updated_at' => $asset->updated_at?->toISOString(),
+                ])->values()
+                : [],
             'created_at' => $lesson->created_at?->toISOString(),
             'updated_at' => $lesson->updated_at?->toISOString(),
         ];

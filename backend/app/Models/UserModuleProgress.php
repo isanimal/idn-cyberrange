@@ -19,6 +19,7 @@ class UserModuleProgress extends Model
         'started_at',
         'completed_at',
         'last_accessed_at',
+        'last_lesson_id',
     ];
 
     protected function casts(): array
@@ -39,5 +40,9 @@ class UserModuleProgress extends Model
     {
         return $this->belongsTo(Module::class);
     }
-}
 
+    public function lastLesson(): BelongsTo
+    {
+        return $this->belongsTo(Lesson::class, 'last_lesson_id');
+    }
+}

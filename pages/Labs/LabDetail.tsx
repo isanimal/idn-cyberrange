@@ -9,7 +9,11 @@ const LabDetail: React.FC = () => {
   const { id } = useParams();
   const { data: lab, isLoading, refetch } = useLabDetail(id || '');
   const instanceId = lab?.user_instance?.instance_id ?? '';
-  const { activate, deactivate, restart, updateNotes, isActivating } = useLabMutations(instanceId, refetch);
+  const { activate, deactivate, restart, updateNotes, isActivating } = useLabMutations(
+    lab?.id ?? '',
+    lab?.user_instance?.instance_id ?? null,
+    refetch,
+  );
   const [notes, setNotes] = useState('');
 
   if (isLoading || !lab) return <div className="p-8">Loading...</div>;

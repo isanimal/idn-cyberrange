@@ -71,6 +71,7 @@ class LabInstanceService
             'template_version_pinned' => $template->version,
             'state' => LabInstanceState::ACTIVE,
             'last_activity_at' => now(),
+            'expires_at' => now()->addMinutes((int) config('labs.max_ttl_minutes', 120)),
             'attempts_count' => $instance->attempts_count + 1,
             'last_error' => null,
         ]);
@@ -124,6 +125,7 @@ class LabInstanceService
 
         return $this->instances->update($instance, [
             'last_activity_at' => now(),
+            'expires_at' => now()->addMinutes((int) config('labs.max_ttl_minutes', 120)),
             'last_error' => null,
         ]);
     }

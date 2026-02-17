@@ -15,15 +15,22 @@ class UserLessonProgress extends Model
     protected $fillable = [
         'user_id',
         'lesson_id',
+        'status',
+        'percent',
         'is_completed',
+        'started_at',
         'completed_at',
+        'last_seen_at',
     ];
 
     protected function casts(): array
     {
         return [
+            'percent' => 'integer',
             'is_completed' => 'boolean',
+            'started_at' => 'datetime',
             'completed_at' => 'datetime',
+            'last_seen_at' => 'datetime',
         ];
     }
 
@@ -37,4 +44,3 @@ class UserLessonProgress extends Model
         return $this->belongsTo(Lesson::class);
     }
 }
-

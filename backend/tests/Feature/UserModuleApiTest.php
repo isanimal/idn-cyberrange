@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Lesson;
+use App\Models\LessonTask;
 use App\Models\Module;
 use App\Models\User;
 use App\Models\UserModuleProgress;
@@ -134,5 +135,143 @@ class UserModuleApiTest extends TestCase
             'module_id' => $module->id,
             'progress_percent' => 100,
         ]);
+    }
+
+    public function test_updating_lesson_progress_updates_module_average_percent(): void
+    {
+        $user = User::factory()->create();
+
+        $module = Module::query()->create([
+            'title' => 'AppSec Basics',
+            'slug' => 'appsec-basics',
+            'description' => 'd1',
+            'difficulty' => 'BASIC',
+            'level' => 'basic',
+            'status' => 'active',
+            'order_index' => 1,
+        ]);
+
+        $lesson1 = Lesson::query()->create([
+            'module_id' => $module->id,
+            'title' => 'Lesson A',
+            'content_md' => '# A',
+            'content_markdown' => '# A',
+            'content' => '# A',
+            'order' => 1,
+            'order_index' => 1,
+            'is_active' => true,
+        ]);
+
+        $lesson2 = Lesson::query()->create([
+            'module_id' => $module->id,
+            'title' => 'Lesson B',
+            'content_md' => '# B',
+            'content_markdown' => '# B',
+            'content' => '# B',
+            'order' => 2,
+            'order_index' => 2,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/lessons/'.$lesson1->id.'/progress', [
+                'status' => 'IN_PROGRESS',
+                'percent' => 60,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.module_progress_percent', 30);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/lessons/'.$lesson2->id.'/complete')
+            ->assertOk()
+            ->assertJsonPath('data.progress_percent', 80);
+
+        $this->assertDatabaseHas('user_module_progress', [
+            'user_id' => $user->id,
+            'module_id' => $module->id,
+            'progress_percent' => 80,
+        ]);
+    }
+
+    public function test_toggling_tasks_updates_lesson_and_module_progress(): void
+    {
+        $user = User::factory()->create();
+
+        $module = Module::query()->create([
+            'title' => 'Tasked Module',
+            'slug' => 'tasked-module',
+            'description' => 'd1',
+            'difficulty' => 'BASIC',
+            'level' => 'basic',
+            'status' => 'active',
+            'order_index' => 1,
+        ]);
+
+        $lesson = Lesson::query()->create([
+            'module_id' => $module->id,
+            'title' => 'Lesson T',
+            'content_md' => '# T',
+            'content_markdown' => '# T',
+            'content' => '# T',
+            'order' => 1,
+            'order_index' => 1,
+            'is_active' => true,
+        ]);
+
+        $task = LessonTask::query()->create([
+            'lesson_id' => $lesson->id,
+            'title' => 'Do step',
+            'order_index' => 1,
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/v1/modules/tasked-module/lessons/'.$lesson->id)
+            ->assertOk()
+            ->assertJsonPath('data.tasks.0.is_done', false);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/tasks/'.$task->id.'/toggle')
+            ->assertOk()
+            ->assertJsonPath('data.is_done', true);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/v1/modules/tasked-module/lessons/'.$lesson->id)
+            ->assertOk()
+            ->assertJsonPath('data.percent', 100);
+    }
+
+    public function test_module_detail_returns_resume_lesson_id(): void
+    {
+        $user = User::factory()->create();
+
+        $module = Module::query()->create([
+            'title' => 'Resume Module',
+            'slug' => 'resume-module',
+            'description' => 'd1',
+            'difficulty' => 'BASIC',
+            'level' => 'basic',
+            'status' => 'active',
+            'order_index' => 1,
+        ]);
+
+        $lesson = Lesson::query()->create([
+            'module_id' => $module->id,
+            'title' => 'Lesson Resume',
+            'content_md' => '# Resume',
+            'content_markdown' => '# Resume',
+            'content' => '# Resume',
+            'order' => 1,
+            'order_index' => 1,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/v1/modules/resume-module/lessons/'.$lesson->id)
+            ->assertOk();
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/v1/modules/resume-module')
+            ->assertOk()
+            ->assertJsonPath('resume_lesson_id', $lesson->id);
     }
 }

@@ -5,7 +5,8 @@ export enum UserRole {
 
 export enum UserStatus {
   ACTIVE = 'ACTIVE',
-  SUSPENDED = 'SUSPENDED'
+  SUSPENDED = 'SUSPENDED',
+  DELETED = 'DELETED'
 }
 
 export interface User {
@@ -16,6 +17,7 @@ export interface User {
   status: UserStatus;
   created_at?: string;
   updated_at?: string;
+  deleted_at?: string | null;
   points: number;
   completedModules: number;
   rank: string;
@@ -105,6 +107,7 @@ export interface ModuleSummary {
   lessons_count: number;
   progress_percent: number;
   is_locked: boolean;
+  locked_reason?: string | null;
   completed_at?: string | null;
 }
 
@@ -113,8 +116,36 @@ export interface LessonSummary {
   title: string;
   content_md?: string | null;
   order: number;
+  status?: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+  percent?: number;
   is_completed: boolean;
+  started_at?: string | null;
   completed_at?: string | null;
+  last_seen_at?: string | null;
+}
+
+export interface LessonTask {
+  id: string;
+  title: string;
+  order_index: number;
+  points?: number | null;
+  is_done?: boolean;
+  done_at?: string | null;
+}
+
+export interface LessonAsset {
+  id: string;
+  type: 'IMAGE' | string;
+  url: string;
+  caption?: string | null;
+  order_index: number;
+}
+
+export interface LessonDetail extends LessonSummary {
+  module_id: string;
+  module_slug: string;
+  tasks?: LessonTask[];
+  assets?: LessonAsset[];
 }
 
 export interface ModuleLabSummary {
@@ -129,6 +160,7 @@ export interface ModuleLabSummary {
 }
 
 export interface ModuleDetail extends ModuleSummary {
+  resume_lesson_id?: string | null;
   lessons: LessonSummary[];
   labs?: ModuleLabSummary[];
 }
@@ -160,6 +192,21 @@ export interface AdminLesson {
   title: string;
   content: string;
   order_index: number;
+  tasks?: Array<{
+    id: string;
+    lesson_id: string;
+    title: string;
+    order_index: number;
+    points?: number | null;
+  }>;
+  assets?: Array<{
+    id: string;
+    lesson_id: string;
+    type: string;
+    url: string;
+    caption?: string | null;
+    order_index: number;
+  }>;
   created_at?: string;
   updated_at?: string;
 }

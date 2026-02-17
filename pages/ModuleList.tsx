@@ -147,8 +147,13 @@ const ModuleList: React.FC = () => {
                     {startingModuleId === module.id ? 'Starting...' : 'Start Module'} <ArrowRight size={16} />
                   </button>
                 ) : (
-                  <div className="mt-4 flex justify-end text-slate-500 text-sm font-semibold">
-                    Locked
+                  <div className="mt-4 space-y-1">
+                    <div className="flex justify-end text-slate-500 text-sm font-semibold">
+                      Locked
+                    </div>
+                    {module.locked_reason ? (
+                      <div className="text-[11px] text-slate-500 text-right">{module.locked_reason}</div>
+                    ) : null}
                   </div>
                 )}
               </div>

@@ -23,11 +23,24 @@ const ModuleManagement: React.FC = () => {
   const [isLessonModalOpen, setIsLessonModalOpen] = useState(false);
   const [selectedModuleForLessons, setSelectedModuleForLessons] = useState<AdminModule | null>(null);
   const [editingLesson, setEditingLesson] = useState<AdminLesson | null>(null);
+  const [lessonEditorTab, setLessonEditorTab] = useState<'content' | 'tasks' | 'assets'>('content');
   const [lessonFormData, setLessonFormData] = useState({
     title: '',
     content: '',
     order_index: 1,
   });
+  const [taskFormData, setTaskFormData] = useState({
+    title: '',
+    order_index: 1,
+    points: '',
+  });
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [assetFormData, setAssetFormData] = useState({
+    url: '',
+    caption: '',
+    order_index: 1,
+  });
+  const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -163,7 +176,10 @@ const ModuleManagement: React.FC = () => {
   const handleManageContent = async (module: AdminModule) => {
     setSelectedModuleForLessons(module);
     setEditingLesson(null);
+    setLessonEditorTab('content');
     setLessonFormData({ title: '', content: '', order_index: 1 });
+    setTaskFormData({ title: '', order_index: 1, points: '' });
+    setAssetFormData({ url: '', caption: '', order_index: 1 });
     setIsLessonModalOpen(true);
     await loadLessons(module.id);
   };
@@ -182,6 +198,7 @@ const ModuleManagement: React.FC = () => {
           order_index: lessonFormData.order_index,
         });
         setLessons((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+        setEditingLesson(updated);
       } else {
         const created = await adminModulesApi.createLesson(selectedModuleForLessons.id, {
           title: lessonFormData.title,
@@ -189,12 +206,12 @@ const ModuleManagement: React.FC = () => {
           order_index: lessonFormData.order_index,
         });
         setLessons((prev) => [...prev, created]);
+        setEditingLesson(created);
         setModules((prev) =>
           prev.map((m) => (m.id === selectedModuleForLessons.id ? { ...m, lessons_count: m.lessons_count + 1 } : m)),
         );
       }
-      setEditingLesson(null);
-      setLessonFormData({ title: '', content: '', order_index: 1 });
+      setLessonEditorTab('content');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save lesson.');
     } finally {
@@ -202,13 +219,34 @@ const ModuleManagement: React.FC = () => {
     }
   };
 
-  const handleEditLesson = (lesson: AdminLesson) => {
-    setEditingLesson(lesson);
-    setLessonFormData({
-      title: lesson.title,
-      content: lesson.content,
-      order_index: lesson.order_index,
-    });
+  const handleEditLesson = async (lesson: AdminLesson) => {
+    if (!selectedModuleForLessons) return;
+
+    setError('');
+    try {
+      const detail = await adminModulesApi.getLesson(selectedModuleForLessons.id, lesson.id);
+      setEditingLesson(detail);
+      setLessonEditorTab('content');
+      setLessonFormData({
+        title: detail.title,
+        content: detail.content,
+        order_index: detail.order_index,
+      });
+      setTaskFormData({
+        title: '',
+        order_index: (detail.tasks?.length ?? 0) + 1,
+        points: '',
+      });
+      setAssetFormData({
+        url: '',
+        caption: '',
+        order_index: (detail.assets?.length ?? 0) + 1,
+      });
+      setEditingTaskId(null);
+      setEditingAssetId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load lesson detail.');
+    }
   };
 
   const handleDeleteLesson = async (lessonId: string) => {
@@ -232,6 +270,97 @@ const ModuleManagement: React.FC = () => {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete lesson.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const refreshEditingLesson = async () => {
+    if (!selectedModuleForLessons || !editingLesson) return;
+
+    const detail = await adminModulesApi.getLesson(selectedModuleForLessons.id, editingLesson.id);
+    setEditingLesson(detail);
+    setLessons((prev) => prev.map((l) => (l.id === detail.id ? detail : l)));
+  };
+
+  const handleSaveTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLesson) return;
+
+    setError('');
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        title: taskFormData.title,
+        order_index: taskFormData.order_index,
+        points: taskFormData.points ? Number(taskFormData.points) : undefined,
+      };
+      if (editingTaskId) {
+        await adminModulesApi.updateTask(editingTaskId, payload);
+      } else {
+        await adminModulesApi.createTask(editingLesson.id, payload);
+      }
+      setTaskFormData({ title: '', order_index: (editingLesson.tasks?.length ?? 0) + 1, points: '' });
+      setEditingTaskId(null);
+      await refreshEditingLesson();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save task.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!window.confirm('Delete this task?')) return;
+    setError('');
+    setIsSubmitting(true);
+    try {
+      await adminModulesApi.removeTask(taskId);
+      await refreshEditingLesson();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete task.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveAsset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLesson) return;
+
+    setError('');
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        type: 'IMAGE' as const,
+        url: assetFormData.url,
+        caption: assetFormData.caption || undefined,
+        order_index: assetFormData.order_index,
+      };
+      if (editingAssetId) {
+        await adminModulesApi.updateAsset(editingAssetId, payload);
+      } else {
+        await adminModulesApi.createAsset(editingLesson.id, payload);
+      }
+      setAssetFormData({ url: '', caption: '', order_index: (editingLesson.assets?.length ?? 0) + 1 });
+      setEditingAssetId(null);
+      await refreshEditingLesson();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save asset.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteAsset = async (assetId: string) => {
+    if (!window.confirm('Delete this asset?')) return;
+    setError('');
+    setIsSubmitting(true);
+    try {
+      await adminModulesApi.removeAsset(assetId);
+      await refreshEditingLesson();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete asset.');
     } finally {
       setIsSubmitting(false);
     }
@@ -510,7 +639,7 @@ const ModuleManagement: React.FC = () => {
                     currentModuleLessons.map((lesson) => (
                       <div
                         key={lesson.id}
-                        onClick={() => handleEditLesson(lesson)}
+                        onClick={() => void handleEditLesson(lesson)}
                         className={`p-3 rounded-lg border cursor-pointer transition-all ${
                           editingLesson?.id === lesson.id
                             ? 'bg-white dark:bg-slate-800 border-idn-500 shadow-md'
@@ -540,47 +669,213 @@ const ModuleManagement: React.FC = () => {
 
               <div className="w-2/3 flex flex-col bg-white dark:bg-slate-800">
                 <div className="p-6 flex-1 overflow-y-auto">
-                  <h4 className="font-bold text-slate-800 dark:text-white mb-4 border-b pb-2 border-slate-100 dark:border-slate-700">
-                    {editingLesson ? 'Edit Lesson' : 'Create New Lesson'}
-                  </h4>
-                  <form id="lessonForm" onSubmit={(e) => void handleSaveLesson(e)} className="space-y-4">
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="col-span-2">
-                        <label className="block text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1">Lesson Title</label>
-                        <input
-                          type="text"
-                          required
-                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-slate-800 dark:text-white focus:border-idn-500 outline-none"
-                          value={lessonFormData.title}
-                          onChange={(e) => setLessonFormData({ ...lessonFormData, title: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1">Order</label>
-                        <input
-                          type="number"
-                          min={1}
-                          required
-                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-slate-800 dark:text-white focus:border-idn-500 outline-none"
-                          value={lessonFormData.order_index}
-                          onChange={(e) => setLessonFormData({ ...lessonFormData, order_index: Number(e.target.value) || 1 })}
-                        />
-                      </div>
+                  <div className="flex items-center justify-between mb-4 border-b pb-2 border-slate-100 dark:border-slate-700">
+                    <h4 className="font-bold text-slate-800 dark:text-white">
+                      {editingLesson ? `Edit Lesson: ${editingLesson.title}` : 'Create New Lesson'}
+                    </h4>
+                    <div className="flex gap-2">
+                      {(['content', 'tasks', 'assets'] as const).map((tab) => (
+                        <button
+                          key={tab}
+                          type="button"
+                          onClick={() => setLessonEditorTab(tab)}
+                          className={`px-3 py-1.5 text-xs rounded-md font-semibold ${lessonEditorTab === tab ? 'bg-idn-500 text-white' : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300'}`}
+                        >
+                          {tab.toUpperCase()}
+                        </button>
+                      ))}
                     </div>
+                  </div>
 
-                    <div className="flex-1 flex flex-col h-full">
-                      <label className="block text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1">
-                        Content (Markdown Supported)
-                      </label>
-                      <textarea
-                        required
-                        className="w-full flex-1 min-h-[300px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4 font-mono text-sm text-slate-800 dark:text-white focus:border-idn-500 outline-none resize-none leading-relaxed"
-                        placeholder="# Lesson Header&#10;Write your learning content here..."
-                        value={lessonFormData.content}
-                        onChange={(e) => setLessonFormData({ ...lessonFormData, content: e.target.value })}
-                      />
+                  {lessonEditorTab === 'content' && (
+                    <form id="lessonForm" onSubmit={(e) => void handleSaveLesson(e)} className="space-y-4">
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="col-span-2">
+                          <label className="block text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1">Lesson Title</label>
+                          <input
+                            type="text"
+                            required
+                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-slate-800 dark:text-white focus:border-idn-500 outline-none"
+                            value={lessonFormData.title}
+                            onChange={(e) => setLessonFormData({ ...lessonFormData, title: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1">Order</label>
+                          <input
+                            type="number"
+                            min={1}
+                            required
+                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-slate-800 dark:text-white focus:border-idn-500 outline-none"
+                            value={lessonFormData.order_index}
+                            onChange={(e) => setLessonFormData({ ...lessonFormData, order_index: Number(e.target.value) || 1 })}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex-1 flex flex-col h-full">
+                        <label className="block text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1">
+                          Content (Markdown Supported)
+                        </label>
+                        <textarea
+                          required
+                          className="w-full flex-1 min-h-[300px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4 font-mono text-sm text-slate-800 dark:text-white focus:border-idn-500 outline-none resize-none leading-relaxed"
+                          placeholder="# Lesson Header&#10;Write your learning content here..."
+                          value={lessonFormData.content}
+                          onChange={(e) => setLessonFormData({ ...lessonFormData, content: e.target.value })}
+                        />
+                      </div>
+                    </form>
+                  )}
+
+                  {lessonEditorTab === 'tasks' && (
+                    <div className="space-y-4">
+                      {!editingLesson ? (
+                        <div className="text-sm text-slate-500">Select or create a lesson first.</div>
+                      ) : (
+                        <>
+                          <form id="taskForm" onSubmit={(e) => void handleSaveTask(e)} className="grid grid-cols-12 gap-3">
+                            <input
+                              className="col-span-6 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-sm text-slate-800 dark:text-white"
+                              placeholder="Task title"
+                              value={taskFormData.title}
+                              onChange={(e) => setTaskFormData({ ...taskFormData, title: e.target.value })}
+                              required
+                            />
+                            <input
+                              type="number"
+                              min={1}
+                              className="col-span-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-sm text-slate-800 dark:text-white"
+                              value={taskFormData.order_index}
+                              onChange={(e) => setTaskFormData({ ...taskFormData, order_index: Number(e.target.value) || 1 })}
+                              required
+                            />
+                            <input
+                              type="number"
+                              min={0}
+                              className="col-span-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-sm text-slate-800 dark:text-white"
+                              placeholder="Points"
+                              value={taskFormData.points}
+                              onChange={(e) => setTaskFormData({ ...taskFormData, points: e.target.value })}
+                            />
+                            <button className="col-span-2 bg-idn-500 text-white text-sm rounded-lg font-semibold">
+                              {editingTaskId ? 'Update' : 'Add'}
+                            </button>
+                          </form>
+
+                          <div className="space-y-2">
+                            {(editingLesson.tasks ?? []).length === 0 ? (
+                              <div className="text-sm text-slate-500">No tasks yet.</div>
+                            ) : (
+                              (editingLesson.tasks ?? []).slice().sort((a, b) => a.order_index - b.order_index).map((task) => (
+                                <div key={task.id} className="flex items-center justify-between border border-slate-200 dark:border-slate-700 rounded-lg p-3">
+                                  <div className="text-sm text-slate-700 dark:text-slate-300">
+                                    #{task.order_index} {task.title}
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingTaskId(task.id);
+                                        setTaskFormData({
+                                          title: task.title,
+                                          order_index: task.order_index,
+                                          points: task.points?.toString() ?? '',
+                                        });
+                                      }}
+                                      className="text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-900"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleDeleteTask(task.id)}
+                                      className="text-xs px-2 py-1 rounded bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-300"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
-                  </form>
+                  )}
+
+                  {lessonEditorTab === 'assets' && (
+                    <div className="space-y-4">
+                      {!editingLesson ? (
+                        <div className="text-sm text-slate-500">Select or create a lesson first.</div>
+                      ) : (
+                        <>
+                          <form id="assetForm" onSubmit={(e) => void handleSaveAsset(e)} className="grid grid-cols-12 gap-3">
+                            <input
+                              className="col-span-7 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-sm text-slate-800 dark:text-white"
+                              placeholder="Image URL"
+                              value={assetFormData.url}
+                              onChange={(e) => setAssetFormData({ ...assetFormData, url: e.target.value })}
+                              required
+                            />
+                            <input
+                              className="col-span-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-sm text-slate-800 dark:text-white"
+                              placeholder="Caption"
+                              value={assetFormData.caption}
+                              onChange={(e) => setAssetFormData({ ...assetFormData, caption: e.target.value })}
+                            />
+                            <input
+                              type="number"
+                              min={1}
+                              className="col-span-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-sm text-slate-800 dark:text-white"
+                              value={assetFormData.order_index}
+                              onChange={(e) => setAssetFormData({ ...assetFormData, order_index: Number(e.target.value) || 1 })}
+                              required
+                            />
+                            <button className="col-span-12 bg-idn-500 text-white text-sm rounded-lg font-semibold py-2">
+                              {editingAssetId ? 'Update Asset' : 'Add Asset'}
+                            </button>
+                          </form>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {(editingLesson.assets ?? []).length === 0 ? (
+                              <div className="text-sm text-slate-500 col-span-2">No assets yet.</div>
+                            ) : (
+                              (editingLesson.assets ?? []).slice().sort((a, b) => a.order_index - b.order_index).map((asset) => (
+                                <div key={asset.id} className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                                  <img src={asset.url} alt={asset.caption ?? 'asset'} className="w-full h-24 object-cover" />
+                                  <div className="p-2 text-xs text-slate-600 dark:text-slate-300">{asset.caption || 'Image'}</div>
+                                  <div className="p-2 flex justify-between">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingAssetId(asset.id);
+                                        setAssetFormData({
+                                          url: asset.url,
+                                          caption: asset.caption ?? '',
+                                          order_index: asset.order_index,
+                                        });
+                                      }}
+                                      className="text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-900"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleDeleteAsset(asset.id)}
+                                      className="text-xs px-2 py-1 rounded bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-300"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-end gap-3 shrink-0">
@@ -591,12 +886,23 @@ const ModuleManagement: React.FC = () => {
                     Close
                   </button>
                   <button
-                    type="submit"
-                    form="lessonForm"
+                    type={lessonEditorTab === 'content' ? 'submit' : 'button'}
+                    form={lessonEditorTab === 'content' ? 'lessonForm' : undefined}
+                    onClick={() => {
+                      if (lessonEditorTab === 'tasks') {
+                        const form = document.getElementById('taskForm') as HTMLFormElement | null;
+                        form?.requestSubmit();
+                      }
+                      if (lessonEditorTab === 'assets') {
+                        const form = document.getElementById('assetForm') as HTMLFormElement | null;
+                        form?.requestSubmit();
+                      }
+                    }}
                     disabled={isSubmitting}
                     className="bg-idn-500 hover:bg-idn-600 text-white font-bold px-6 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm disabled:opacity-70"
                   >
-                    <Save size={18} /> {editingLesson ? 'Update Lesson' : 'Add Lesson'}
+                    <Save size={18} />
+                    {lessonEditorTab === 'content' ? (editingLesson ? 'Update Lesson' : 'Add Lesson') : lessonEditorTab === 'tasks' ? (editingTaskId ? 'Update Task' : 'Add Task') : (editingAssetId ? 'Update Asset' : 'Add Asset')}
                   </button>
                 </div>
               </div>
@@ -609,4 +915,3 @@ const ModuleManagement: React.FC = () => {
 };
 
 export default ModuleManagement;
-

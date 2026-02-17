@@ -79,5 +79,37 @@ class AdminOrchestrationApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('status', 'STOPPED');
     }
-}
 
+    public function test_admin_can_fetch_orchestration_overview(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::ADMIN]);
+        $user = User::factory()->create();
+        $template = LabTemplate::factory()->create(['status' => LabTemplateStatus::PUBLISHED]);
+
+        LabInstance::query()->create([
+            'user_id' => $user->id,
+            'lab_template_id' => $template->id,
+            'template_version_pinned' => $template->version,
+            'state' => LabInstanceState::ACTIVE,
+            'progress_percent' => 0,
+            'attempts_count' => 1,
+            'notes' => '',
+            'score' => 0,
+            'started_at' => now()->subMinute(),
+            'last_activity_at' => now(),
+        ]);
+
+        $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/v1/admin/orchestration/overview')
+            ->assertOk()
+            ->assertJsonStructure([
+                'data' => [
+                    'activeContainers',
+                    'avgCpu',
+                    'memAllocated',
+                    'errors',
+                    'instances',
+                ],
+            ]);
+    }
+}

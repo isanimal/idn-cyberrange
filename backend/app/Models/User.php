@@ -24,6 +24,7 @@ class User extends Authenticatable
         'password',
         'role',
         'status',
+        'deleted_at',
     ];
 
     protected $hidden = ['password', 'remember_token'];
@@ -35,6 +36,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'role' => UserRole::class,
             'status' => UserStatus::class,
+            'deleted_at' => 'datetime',
         ];
     }
 
@@ -51,5 +53,10 @@ class User extends Authenticatable
     public function lessonProgress(): HasMany
     {
         return $this->hasMany(UserLessonProgress::class);
+    }
+
+    public function taskProgress(): HasMany
+    {
+        return $this->hasMany(UserTaskProgress::class);
     }
 }

@@ -26,6 +26,16 @@ interface OrchestrationRow {
   last_error: string | null;
 }
 
+interface OrchestrationOverviewPayload {
+  data: {
+    activeContainers: number;
+    avgCpu: number | null;
+    memAllocated: number | null;
+    errors: number;
+    instances: OrchestrationRow[];
+  };
+}
+
 const formatUptime = (seconds: number): string => {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -41,13 +51,30 @@ const Orchestration: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [resourceHistory, setResourceHistory] = useState<Array<{ time: string; cpu: number | null; memory: number | null }>>([]);
+  const [overviewStats, setOverviewStats] = useState<{
+    activeContainers: number;
+    avgCpu: number;
+    memAllocated: number;
+    errors: number;
+  }>({
+    activeContainers: 0,
+    avgCpu: 0,
+    memAllocated: 0,
+    errors: 0,
+  });
 
   const loadInstances = async () => {
     setIsLoading(true);
     setError('');
     try {
-      const response = await apiClient.get<{ data: OrchestrationRow[] }>('/api/v1/admin/orchestration/instances');
-      setInstances(response.data);
+      const response = await apiClient.get<OrchestrationOverviewPayload>('/api/v1/admin/orchestration/overview');
+      setInstances(response.data.instances);
+      setOverviewStats({
+        activeContainers: response.data.activeContainers,
+        avgCpu: Math.round(response.data.avgCpu ?? 0),
+        memAllocated: response.data.memAllocated ?? 0,
+        errors: response.data.errors,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load orchestration data.');
     } finally {
@@ -93,6 +120,7 @@ const Orchestration: React.FC = () => {
         refreshSelectedFromList(instanceId, next);
         return next;
       });
+      void loadInstances();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to force stop instance.');
     } finally {
@@ -110,6 +138,7 @@ const Orchestration: React.FC = () => {
         refreshSelectedFromList(instanceId, next);
         return next;
       });
+      void loadInstances();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to restart instance.');
     } finally {
@@ -117,19 +146,7 @@ const Orchestration: React.FC = () => {
     }
   };
 
-  const stats = useMemo(() => {
-    const activeContainers = instances.filter((i) => i.status === 'RUNNING').length;
-    const cpuValues = instances.map((i) => i.resources.cpu_percent).filter((v): v is number => v !== null);
-    const memValues = instances.map((i) => i.resources.mem_mb).filter((v): v is number => v !== null);
-    const errors = instances.filter((i) => i.status === 'ERROR').length;
-
-    return {
-      activeContainers,
-      avgCpu: cpuValues.length ? Math.round(cpuValues.reduce((a, b) => a + b, 0) / cpuValues.length) : 0,
-      memAllocated: memValues.reduce((a, b) => a + b, 0),
-      errors,
-    };
-  }, [instances]);
+  const stats = useMemo(() => overviewStats, [overviewStats]);
 
   return (
     <div className="space-y-6 relative">
@@ -400,4 +417,3 @@ const Orchestration: React.FC = () => {
 };
 
 export default Orchestration;
-

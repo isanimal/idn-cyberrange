@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import Card from '../../components/UI/Card';
 import { UserRole, UserStatus } from '../../types';
-import { RotateCcw, Shield, User, UserPlus, UserX, X } from 'lucide-react';
+import { RotateCcw, Shield, User, UserPlus, UserX, X, Trash2, UserCheck } from 'lucide-react';
 
 interface PaginationMeta {
   current_page: number;
@@ -12,7 +12,17 @@ interface PaginationMeta {
 }
 
 const UserManagement: React.FC = () => {
-  const { getAllUsers, fetchUsers, registerUser, suspendUser, resetUserAttempts, user: currentUser } = useAuth();
+  const {
+    getAllUsers,
+    fetchUsers,
+    registerUser,
+    suspendUser,
+    unsuspendUser,
+    resetUserAttempts,
+    deleteUser,
+    restoreUser,
+    user: currentUser,
+  } = useAuth();
   const users = getAllUsers();
   
   const [showModal, setShowModal] = useState(false);
@@ -21,6 +31,7 @@ const UserManagement: React.FC = () => {
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
+  const [includeDeleted, setIncludeDeleted] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -28,12 +39,12 @@ const UserManagement: React.FC = () => {
     role: UserRole.USER
   });
 
-  const loadUsers = async (targetPage = page) => {
+  const loadUsers = async (targetPage = page, withDeleted = includeDeleted) => {
     setIsLoading(true);
     setError('');
 
     try {
-      const result = await fetchUsers(targetPage);
+      const result = await fetchUsers(targetPage, withDeleted);
       setMeta(result.meta);
       setPage(result.meta.current_page);
     } catch (err) {
@@ -44,8 +55,8 @@ const UserManagement: React.FC = () => {
   };
 
   useEffect(() => {
-    void loadUsers(page);
-  }, []);
+    void loadUsers(page, includeDeleted);
+  }, [includeDeleted]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +89,20 @@ const UserManagement: React.FC = () => {
     }
   };
 
+  const handleUnsuspend = async (id: string) => {
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      await unsuspendUser(id);
+      await loadUsers(page);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to unsuspend user.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleResetAttempts = async (id: string) => {
     setError('');
     setIsSubmitting(true);
@@ -92,6 +117,34 @@ const UserManagement: React.FC = () => {
     }
   };
 
+  const handleRemove = async (id: string) => {
+    if (!window.confirm('Remove this user? This is a soft delete and can be restored.')) return;
+
+    setError('');
+    setIsSubmitting(true);
+    try {
+      await deleteUser(id);
+      await loadUsers(page);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove user.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRestore = async (id: string) => {
+    setError('');
+    setIsSubmitting(true);
+    try {
+      await restoreUser(id);
+      await loadUsers(page);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to restore user.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -99,13 +152,26 @@ const UserManagement: React.FC = () => {
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">User Management</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">Create and manage platform access.</p>
         </div>
-        <button 
-          onClick={() => setShowModal(true)}
-          disabled={isSubmitting}
-          className="bg-idn-500 hover:bg-idn-600 text-white font-bold px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-colors"
-        >
-          <UserPlus size={18} /> Register New User
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIncludeDeleted((prev) => !prev)}
+            className={`px-3 py-2 rounded-lg text-xs font-semibold border ${
+              includeDeleted
+                ? 'border-idn-500 text-idn-600 dark:text-idn-400'
+                : 'border-slate-300 text-slate-600 dark:text-slate-300'
+            }`}
+          >
+            {includeDeleted ? 'Hide Deleted' : 'Show Deleted'}
+          </button>
+          <button 
+            onClick={() => setShowModal(true)}
+            disabled={isSubmitting}
+            className="bg-idn-500 hover:bg-idn-600 text-white font-bold px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-colors"
+          >
+            <UserPlus size={18} /> Register New User
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -155,7 +221,9 @@ const UserManagement: React.FC = () => {
                     <span className={`px-2 py-1 rounded text-xs font-bold border ${
                       u.status === UserStatus.ACTIVE
                         ? 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800'
-                        : 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800'
+                        : u.status === UserStatus.SUSPENDED
+                          ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800'
+                          : 'bg-slate-200 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
                     }`}>
                       {u.status}
                     </span>
@@ -174,7 +242,7 @@ const UserManagement: React.FC = () => {
                         >
                           <RotateCcw size={18} />
                         </button>
-                        {u.status !== UserStatus.SUSPENDED && (
+                        {u.status === UserStatus.ACTIVE && (
                           <button
                             onClick={() => void handleSuspend(u.id)}
                             disabled={isSubmitting}
@@ -182,6 +250,36 @@ const UserManagement: React.FC = () => {
                             title="Suspend User"
                           >
                             <UserX size={18} />
+                          </button>
+                        )}
+                        {u.status === UserStatus.SUSPENDED && (
+                          <button
+                            onClick={() => void handleUnsuspend(u.id)}
+                            disabled={isSubmitting}
+                            className="p-2 rounded hover:bg-green-50 dark:hover:bg-green-900/20 text-slate-400 hover:text-green-500 transition-colors"
+                            title="Unsuspend User"
+                          >
+                            <UserCheck size={18} />
+                          </button>
+                        )}
+                        {u.status !== UserStatus.DELETED && (
+                          <button
+                            onClick={() => void handleRemove(u.id)}
+                            disabled={isSubmitting}
+                            className="p-2 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors"
+                            title="Remove User"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        )}
+                        {u.status === UserStatus.DELETED && (
+                          <button
+                            onClick={() => void handleRestore(u.id)}
+                            disabled={isSubmitting}
+                            className="p-2 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-400 hover:text-blue-500 transition-colors"
+                            title="Restore User"
+                          >
+                            <RotateCcw size={18} />
                           </button>
                         )}
                       </div>

@@ -62,12 +62,12 @@ export const labService = {
   },
 
   getInstance: async (instanceId: string): Promise<LabInstance> => {
-    const response = await apiClient.get<{ data: LabInstance }>(`/api/v1/lab-instances/${instanceId}`);
+    const response = await apiClient.get<{ data: LabInstance }>(`/api/v1/labs/instances/${instanceId}`);
     return response.data;
   },
 
   myInstances: async (): Promise<LabInstance[]> => {
-    const response = await apiClient.get<InstanceListResponse>('/api/v1/lab-instances/my');
+    const response = await apiClient.get<InstanceListResponse>('/api/v1/labs/instances/my');
     return response.data;
   },
 
@@ -104,7 +104,8 @@ export const labService = {
   },
 };
 
-const DEFAULT_COMPOSE = `version: '3.9'\nservices:\n  app:\n    image: nginx:alpine\n    ports:\n      - "\\${PORT}:80"\n`;
+const PORT_PLACEHOLDER = '${PORT}';
+const DEFAULT_COMPOSE = `version: '3.9'\nservices:\n  app:\n    image: nginx:alpine\n    ports:\n      - "${PORT_PLACEHOLDER}:80"\n`;
 
 const toAdminLabPayload = (data: Partial<LabTemplate>): Record<string, unknown> => {
   const internalPort = data.configuration?.base_port ?? data.internal_port ?? 80;

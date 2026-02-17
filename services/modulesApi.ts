@@ -1,4 +1,4 @@
-import { ModuleDetail, ModuleSummary } from '../types';
+import { LessonDetail, ModuleDetail, ModuleSummary } from '../types';
 import { apiClient } from './apiClient';
 
 export const modulesApi = {
@@ -21,6 +21,45 @@ export const modulesApi = {
   ): Promise<{ data: { module_id: string; lesson_id: string; progress_percent: number } }> =>
     apiClient.post<{ data: { module_id: string; lesson_id: string; progress_percent: number } }>(
       `/api/v1/modules/${slug}/lessons/${lessonId}/complete`,
+    ),
+
+  getLesson: async (slug: string, lessonId: string): Promise<LessonDetail> => {
+    const response = await apiClient.get<{ data: LessonDetail }>(`/api/v1/modules/${slug}/lessons/${lessonId}`);
+    return response.data;
+  },
+
+  getLessonById: async (lessonId: string): Promise<LessonDetail> => {
+    const response = await apiClient.get<{ data: LessonDetail }>(`/api/v1/lessons/${lessonId}`);
+    return response.data;
+  },
+
+  updateLessonProgress: (
+    lessonId: string,
+    payload: { status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'; percent?: number },
+  ): Promise<{ data: { module_progress_percent: number } }> =>
+    apiClient.post<{ data: { module_progress_percent: number } }>(`/api/v1/lessons/${lessonId}/progress`, payload),
+
+  completeLessonById: (
+    lessonId: string,
+  ): Promise<{ data: { module_id: string; lesson_id: string; progress_percent: number } }> =>
+    apiClient.post<{ data: { module_id: string; lesson_id: string; progress_percent: number } }>(
+      `/api/v1/lessons/${lessonId}/complete`,
+    ),
+
+  readingEvent: (
+    lessonId: string,
+    payload: { event: 'OPEN' | 'SCROLL' | 'HEARTBEAT'; percentViewed?: number },
+  ): Promise<{ data: { lesson_id: string; status: string; percent: number; module_progress_percent: number } }> =>
+    apiClient.post<{ data: { lesson_id: string; status: string; percent: number; module_progress_percent: number } }>(
+      `/api/v1/lessons/${lessonId}/reading-event`,
+      payload,
+    ),
+
+  toggleTask: (
+    taskId: string,
+  ): Promise<{ data: { task_id: string; is_done: boolean; lesson_percent: number; module_progress_percent: number } }> =>
+    apiClient.post<{ data: { task_id: string; is_done: boolean; lesson_percent: number; module_progress_percent: number } }>(
+      `/api/v1/tasks/${taskId}/toggle`,
     ),
 
   list: async (): Promise<ModuleSummary[]> => modulesApi.listModules(),

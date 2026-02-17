@@ -10,6 +10,7 @@ interface BackendUser {
   status: UserStatus;
   created_at?: string;
   updated_at?: string;
+  deleted_at?: string | null;
   points?: number;
   completedModules?: number;
 }
@@ -28,10 +29,12 @@ interface AuthContextType {
   isLoading: boolean;
   registerUser: (newUser: { name: string; email: string; password: string; role: UserRole }) => Promise<void>;
   getAllUsers: () => User[];
-  fetchUsers: (page?: number) => Promise<{ data: User[]; meta: UsersPaginationMeta }>;
+  fetchUsers: (page?: number, includeDeleted?: boolean) => Promise<{ data: User[]; meta: UsersPaginationMeta }>;
   suspendUser: (id: string) => Promise<void>;
+  unsuspendUser: (id: string) => Promise<void>;
   resetUserAttempts: (id: string) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
+  restoreUser: (id: string) => Promise<void>;
   refreshMe: () => Promise<void>;
 }
 
@@ -130,8 +133,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     forceLocalLogout();
   };
 
-  const fetchUsers = async (page = 1): Promise<{ data: User[]; meta: UsersPaginationMeta }> => {
-    const response = await apiClient.get<{ data: BackendUser[]; meta: UsersPaginationMeta }>(`/api/v1/admin/users?page=${page}`);
+  const fetchUsers = async (page = 1, includeDeleted = false): Promise<{ data: User[]; meta: UsersPaginationMeta }> => {
+    const response = await apiClient.get<{ data: BackendUser[]; meta: UsersPaginationMeta }>(
+      `/api/v1/admin/users?page=${page}&includeDeleted=${includeDeleted ? '1' : '0'}`,
+    );
     const mapped = response.data.map(toViewUser);
     setUsers(mapped);
     return { data: mapped, meta: response.meta };
@@ -145,12 +150,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await apiClient.patch<BackendUser>(`/api/v1/admin/users/${id}/suspend`);
   };
 
+  const unsuspendUser = async (id: string): Promise<void> => {
+    await apiClient.patch<BackendUser>(`/api/v1/admin/users/${id}/unsuspend`);
+  };
+
   const resetUserAttempts = async (id: string): Promise<void> => {
     await apiClient.patch<BackendUser>(`/api/v1/admin/users/${id}`, { reset_attempts: true });
   };
 
   const deleteUser = async (id: string): Promise<void> => {
     await apiClient.delete<void>(`/api/v1/admin/users/${id}`);
+  };
+
+  const restoreUser = async (id: string): Promise<void> => {
+    await apiClient.post<BackendUser>(`/api/v1/admin/users/${id}/restore`);
   };
 
   const value = useMemo<AuthContextType>(
@@ -163,8 +176,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       getAllUsers: () => users,
       fetchUsers,
       suspendUser,
+      unsuspendUser,
       resetUserAttempts,
       deleteUser,
+      restoreUser,
       refreshMe,
     }),
     [user, isLoading, users],

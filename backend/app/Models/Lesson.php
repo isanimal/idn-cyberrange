@@ -38,4 +38,14 @@ class Lesson extends Model
     {
         return $this->hasMany(UserLessonProgress::class, 'lesson_id');
     }
+
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(LessonTask::class)->orderBy('order_index');
+    }
+
+    public function assets(): HasMany
+    {
+        return $this->hasMany(LessonAsset::class)->orderBy('order_index');
+    }
 }

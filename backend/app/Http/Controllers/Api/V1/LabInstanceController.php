@@ -8,12 +8,17 @@ use App\Http\Requests\LabInstance\UpdateLabInstanceRequest;
 use App\Http\Requests\LabInstance\UpgradeLabInstanceRequest;
 use App\Http\Resources\LabInstanceResource;
 use App\Services\Lab\LabInstanceService;
+use App\Services\Lab\LabTemplateService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class LabInstanceController extends Controller
 {
-    public function __construct(private readonly LabInstanceService $instances)
+    public function __construct(
+        private readonly LabInstanceService $instances,
+        private readonly LabTemplateService $templates,
+    )
     {
     }
 
@@ -66,6 +71,18 @@ class LabInstanceController extends Controller
     public function stop(Request $request, string $instance_id): JsonResponse
     {
         return $this->deactivate($request, $instance_id);
+    }
+
+    public function stopBySlug(Request $request, string $id_or_slug): JsonResponse
+    {
+        $template = $this->templates->findPublishedForUserCatalogOrFail($id_or_slug);
+        $instance = $this->instances->findUserInstanceForTemplateFamily($request->user(), $template);
+
+        if (! $instance) {
+            throw new HttpException(404, 'Lab instance not found for this template.');
+        }
+
+        return $this->deactivate($request, $instance->id);
     }
 
     public function update(UpdateLabInstanceRequest $request, string $instance_id): JsonResponse
@@ -126,10 +143,20 @@ class LabInstanceController extends Controller
         ]);
     }
 
+    public function myForLabsNamespace(Request $request): JsonResponse
+    {
+        return $this->my($request);
+    }
+
     public function show(Request $request, string $instance_id): JsonResponse
     {
         $instance = $this->instances->findInstanceForUserOrFail($instance_id, $request->user());
 
         return response()->json(['data' => new LabInstanceResource($instance->load('template'))]);
+    }
+
+    public function showForLabsNamespace(Request $request, string $instance_id): JsonResponse
+    {
+        return $this->show($request, $instance_id);
     }
 }

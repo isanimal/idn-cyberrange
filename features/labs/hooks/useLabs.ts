@@ -40,13 +40,18 @@ export const useLabDetail = (id: string) => {
   return { data, isLoading, error, refetch };
 };
 
-export const useLabMutations = (labId: string, onSuccess: () => void) => {
+export const useLabMutations = (
+  templateId: string,
+  instanceId: string | null,
+  onSuccess: () => void,
+) => {
   const [isActivating, setIsActivating] = useState(false);
 
   const activate = async () => {
+    if (!templateId) return;
     setIsActivating(true);
     try {
-      await labService.activateLab(labId);
+      await labService.activateLab(templateId);
       onSuccess();
     } finally {
       setIsActivating(false);
@@ -74,10 +79,10 @@ export const useLabMutations = (labId: string, onSuccess: () => void) => {
   };
 
   const updateNotes = async (notes: string) => {
-    if (!labId) {
+    if (!instanceId) {
       return;
     }
-    await labService.updateInstance(labId, { notes });
+    await labService.updateInstance(instanceId, { notes });
     // Silent update, no full refetch needed usually, but for demo:
     onSuccess(); 
   };

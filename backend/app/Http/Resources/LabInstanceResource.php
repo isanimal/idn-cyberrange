@@ -17,6 +17,7 @@ class LabInstanceResource extends JsonResource
         $runtimeMeta = is_array($this->runtime_metadata) ? $this->runtime_metadata : [];
         $gateway = data_get($runtimeMeta, 'gateway', $host);
         $ipAddress = data_get($runtimeMeta, 'ip_address', null);
+        $resolvedPorts = data_get($runtimeMeta, 'ports');
 
         $accessUrls = [];
         if ($assignedPort) {
@@ -46,12 +47,14 @@ class LabInstanceResource extends JsonResource
             'last_error' => $this->last_error,
             'status' => $this->state?->value ?? $this->state,
             'ip_address' => $ipAddress,
-            'exposed_ports' => $assignedPort ? [[
-                'internal' => $internalPort,
-                'external' => $assignedPort,
-            ]] : [],
+            'exposed_ports' => is_array($resolvedPorts) && ! empty($resolvedPorts)
+                ? $resolvedPorts
+                : ($assignedPort ? [[
+                    'container_port' => $internalPort,
+                    'host_port' => $assignedPort,
+                ]] : []),
             'gateway' => $gateway,
-            'max_ttl' => 3600,
+            'max_ttl' => ((int) config('labs.max_ttl_minutes', 120)) * 60,
             'resources' => [
                 'cpu' => null,
                 'memory_mb' => null,

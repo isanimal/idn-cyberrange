@@ -52,4 +52,18 @@ class AdminModuleApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('status', 'PUBLISHED');
     }
+
+    public function test_non_admin_cannot_create_module(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::USER]);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/admin/modules', [
+                'title' => 'Blocked',
+                'slug' => 'blocked',
+                'difficulty' => 'BASIC',
+                'order_index' => 99,
+            ])
+            ->assertForbidden();
+    }
 }

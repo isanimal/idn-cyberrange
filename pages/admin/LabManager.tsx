@@ -7,6 +7,8 @@ import {
   X, Check, AlertTriangle, Search, Filter, Server, Code
 } from 'lucide-react';
 
+const PORT_PLACEHOLDER = '${PORT}';
+
 const LabManager: React.FC = () => {
   const { data: labs, isLoading, refetch } = useAdminLabs();
   const { 
@@ -41,7 +43,7 @@ const LabManager: React.FC = () => {
       tags: []
     });
     setConfigData({
-      content: `version: '3'\nservices:\n  app:\n    image: nginx:latest\n    ports:\n      - "\${PORT}:80"`,
+      content: `version: '3'\nservices:\n  app:\n    image: nginx:latest\n    ports:\n      - "${PORT_PLACEHOLDER}:80"`,
       base_port: 80
     });
     setEditorOpen(true);
@@ -58,7 +60,7 @@ const LabManager: React.FC = () => {
         });
     } else {
         setConfigData({
-            content: `version: '3'\nservices:\n  app:\n    image: nginx:latest\n    ports:\n      - "\${PORT}:80"`,
+            content: `version: '3'\nservices:\n  app:\n    image: nginx:latest\n    ports:\n      - "${PORT_PLACEHOLDER}:80"`,
             base_port: 80
         });
     }
@@ -396,7 +398,7 @@ const LabManager: React.FC = () => {
                             <div>
                                 <h4 className="font-bold text-sm text-blue-700 dark:text-blue-400">Orchestration Logic</h4>
                                 <p className="text-xs text-blue-600 dark:text-blue-300 mt-1">
-                                    The system will dynamically replace <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded font-bold">{`\${PORT}`}</code> with an available port on the host server during runtime. 
+                                    The system will dynamically replace <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded font-bold">{PORT_PLACEHOLDER}</code> with an available port on the host server during runtime. 
                                     Do not hardcode host ports (e.g. 80:80) to avoid conflicts.
                                 </p>
                             </div>
