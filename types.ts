@@ -84,3 +84,30 @@ export interface StatPoint {
   name: string;
   value: number;
 }
+
+export type AdminModuleLevel = 'basic' | 'intermediate' | 'advanced';
+export type AdminModuleStatus = 'active' | 'locked' | 'draft';
+
+export interface AdminModule {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  level: AdminModuleLevel;
+  status: AdminModuleStatus;
+  order_index: number;
+  lessons_count: number;
+  progress: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AdminLesson {
+  id: string;
+  module_id: string;
+  title: string;
+  content: string;
+  order_index: number;
+  created_at?: string;
+  updated_at?: string;
+}

@@ -63,6 +63,13 @@ class LabTemplateService
         $data['changelog'] = $data['changelog'] ?? [];
         $data['template_family_uuid'] = $data['template_family_uuid'] ?? (string) Str::uuid();
         $data['is_latest'] = true;
+        $data['version'] = $data['version'] ?? '0.1.0';
+        $data['objectives'] = $data['objectives'] ?? [];
+        $data['prerequisites'] = $data['prerequisites'] ?? [];
+        $data['tags'] = $data['tags'] ?? [];
+        $data['assets'] = $data['assets'] ?? [];
+        $data['estimated_time_minutes'] = $data['estimated_time_minutes'] ?? 60;
+        $data['long_description'] = $data['long_description'] ?? '# Lab Guide';
 
         $lab = $this->templates->create($data);
         $this->audit->log('ADMIN_LAB_CREATED', $actorId, 'LabTemplate', $lab->id, ['slug' => $lab->slug]);
@@ -150,6 +157,22 @@ class LabTemplateService
 
     private function normalizePayload(array $data): array
     {
+        if (isset($data['guide_markdown'])) {
+            $data['long_description'] = $data['guide_markdown'];
+            unset($data['guide_markdown']);
+        }
+
+        if (isset($data['est_minutes'])) {
+            $data['estimated_time_minutes'] = $data['est_minutes'];
+            unset($data['est_minutes']);
+        }
+
+        if (isset($data['docker_compose_yaml'])) {
+            $data['configuration_type'] = 'docker-compose';
+            $data['configuration_content'] = $data['docker_compose_yaml'];
+            unset($data['docker_compose_yaml']);
+        }
+
         if (isset($data['configuration'])) {
             $data['configuration_type'] = $data['configuration']['type'] ?? null;
             $data['configuration_content'] = $data['configuration']['content'] ?? null;
@@ -157,8 +180,20 @@ class LabTemplateService
             unset($data['configuration']);
         }
 
-        if (! array_key_exists('internal_port', $data)) {
+        if (! array_key_exists('internal_port', $data) || $data['internal_port'] === null) {
             $data['internal_port'] = $data['configuration_base_port'] ?? 80;
+        }
+
+        if (! array_key_exists('configuration_base_port', $data) || $data['configuration_base_port'] === null) {
+            $data['configuration_base_port'] = $data['internal_port'] ?? 80;
+        }
+
+        if (! array_key_exists('configuration_type', $data) || $data['configuration_type'] === null) {
+            $data['configuration_type'] = 'docker-compose';
+        }
+
+        if (! array_key_exists('configuration_content', $data) || $data['configuration_content'] === null) {
+            $data['configuration_content'] = "version: '3.9'\nservices:\n  app:\n    image: nginx:alpine\n    ports:\n      - \"\\$".'{PORT}:'.($data['internal_port'] ?? 80)."\"\n";
         }
 
         if (! array_key_exists('docker_image', $data)) {

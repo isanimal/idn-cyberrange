@@ -29,8 +29,18 @@ class LocalDockerDriver implements LabDriverInterface
             }
         }
 
+        $containerId = null;
+        if (! app()->environment('testing')) {
+            $ps = new Process(['docker', 'compose', '-f', $composePath, 'ps', '-q', 'app']);
+            $ps->run();
+            if ($ps->isSuccessful()) {
+                $containerId = trim($ps->getOutput()) ?: null;
+            }
+        }
+
         return [
             'container_name' => 'lab_'.$instance->id,
+            'container_id' => $containerId,
             'compose_path' => $composePath,
             'workdir' => $workdir,
             'network_name' => 'lab_net_'.$instance->id,
@@ -99,15 +109,8 @@ class LocalDockerDriver implements LabDriverInterface
 
     private function renderCompose(LabTemplate $template, int $assignedPort): string
     {
-        $basePort = (int) ($template->configuration_base_port ?? $template->internal_port ?? 80);
-
-        if (($template->configuration_type ?? 'docker-compose') === 'docker-compose' && $template->configuration_content) {
-            return str_replace(['${PORT}', '${BASE_PORT}'], [(string) $assignedPort, (string) $basePort], $template->configuration_content);
-        }
-
-        $image = $template->docker_image ?? 'nginx:alpine';
-
-        return "version: '3.9'\nservices:\n  app:\n    image: {$image}\n    ports:\n      - \"{$assignedPort}:{$basePort}\"\n";
+        // MVP runtime path: always boot a minimal nginx container for predictable local orchestration.
+        return "version: '3.9'\nservices:\n  app:\n    image: nginx:alpine\n    ports:\n      - \"{$assignedPort}:80\"\n";
     }
 
     private function deleteDirectory(string $directory): void

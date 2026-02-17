@@ -53,6 +53,9 @@ export interface LabTemplate {
   assets?: LabAsset[];
   changelog?: LabChangelog[];
   configuration?: LabConfiguration; // NEW: Stores the docker definition
+  internal_port?: number;
+  docker_compose_yaml?: string;
+  guide_markdown?: string;
   created_at: string;
   updated_at: string;
 }

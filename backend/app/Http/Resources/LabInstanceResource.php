@@ -26,6 +26,7 @@ class LabInstanceResource extends JsonResource
             'assigned_port' => $this->assigned_port,
             'connection_url' => $this->connection_url,
             'runtime_metadata' => $this->runtime_metadata ?? (object) [],
+            'last_error' => $this->last_error,
         ];
     }
 }

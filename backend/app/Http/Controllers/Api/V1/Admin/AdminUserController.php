@@ -23,15 +23,29 @@ class AdminUserController extends Controller
     public function index(): JsonResponse
     {
         $users = User::query()
-            ->select(['id', 'name', 'email', 'role', 'status', 'created_at'])
+            ->select(['id', 'name', 'email', 'role', 'status', 'created_at', 'updated_at'])
             ->paginate(20);
 
         return response()->json([
-            'data' => $users->items(),
+            'data' => collect($users->items())->map(function (User $user): array {
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $user->role?->value,
+                    'status' => $user->status?->value,
+                    'created_at' => $user->created_at?->toISOString(),
+                    'updated_at' => $user->updated_at?->toISOString(),
+                    // TODO: replace these defaults when gamification/progress source of truth is available.
+                    'points' => 0,
+                    'completedModules' => 0,
+                ];
+            })->values(),
             'meta' => [
                 'current_page' => $users->currentPage(),
                 'last_page' => $users->lastPage(),
                 'total' => $users->total(),
+                'per_page' => $users->perPage(),
             ],
         ]);
     }

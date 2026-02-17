@@ -67,20 +67,44 @@ const LabManager: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const finalData = {
+
+    if (!editingLab && activeTab === 'info') {
+      const created = await createLab({
         ...formData,
-        configuration: {
-            type: 'docker-compose' as const,
-            content: configData.content,
-            base_port: configData.base_port
-        }
+        version: formData.version || '0.1.0',
+        status: LabStatus.DRAFT,
+      });
+      setEditingLab(created);
+      setFormData({ ...created });
+      setActiveTab('config');
+      return;
+    }
+
+    if (editingLab && activeTab === 'info') {
+      await updateLab(editingLab.id, {
+        ...formData,
+      });
+      setEditorOpen(false);
+      return;
+    }
+
+    const finalData = {
+      ...formData,
+      configuration: {
+        type: 'docker-compose' as const,
+        content: configData.content,
+        base_port: configData.base_port,
+      },
     };
 
     if (editingLab) {
       await updateLab(editingLab.id, finalData);
     } else {
-      await createLab(finalData);
+      await createLab({
+        ...finalData,
+        version: formData.version || '0.1.0',
+        status: LabStatus.DRAFT,
+      });
     }
     setEditorOpen(false);
   };

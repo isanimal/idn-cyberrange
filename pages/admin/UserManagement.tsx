@@ -1,17 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import Card from '../../components/UI/Card';
-import { UserRole } from '../../types';
-import { UserPlus, Trash2, Shield, User, X } from 'lucide-react';
+import { UserRole, UserStatus } from '../../types';
+import { RotateCcw, Shield, User, UserPlus, UserX, X } from 'lucide-react';
+
+interface PaginationMeta {
+  current_page: number;
+  last_page: number;
+  total: number;
+  per_page?: number;
+}
 
 const UserManagement: React.FC = () => {
-  const { getAllUsers, fetchUsers, registerUser, deleteUser, user: currentUser } = useAuth();
+  const { getAllUsers, fetchUsers, registerUser, suspendUser, resetUserAttempts, user: currentUser } = useAuth();
   const users = getAllUsers();
   
   const [showModal, setShowModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState<PaginationMeta | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -19,12 +28,14 @@ const UserManagement: React.FC = () => {
     role: UserRole.USER
   });
 
-  const loadUsers = async () => {
+  const loadUsers = async (targetPage = page) => {
     setIsLoading(true);
     setError('');
 
     try {
-      await fetchUsers();
+      const result = await fetchUsers(targetPage);
+      setMeta(result.meta);
+      setPage(result.meta.current_page);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users.');
     } finally {
@@ -33,7 +44,7 @@ const UserManagement: React.FC = () => {
   };
 
   useEffect(() => {
-    void loadUsers();
+    void loadUsers(page);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,7 +56,7 @@ const UserManagement: React.FC = () => {
       await registerUser(formData);
       setShowModal(false);
       setFormData({ name: '', email: '', password: '', role: UserRole.USER });
-      await loadUsers();
+      await loadUsers(page);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create user.');
     } finally {
@@ -53,15 +64,29 @@ const UserManagement: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleSuspend = async (id: string) => {
     setError('');
     setIsSubmitting(true);
 
     try {
-      await deleteUser(id);
-      await loadUsers();
+      await suspendUser(id);
+      await loadUsers(page);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to revoke access.');
+      setError(err instanceof Error ? err.message : 'Failed to suspend user.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResetAttempts = async (id: string) => {
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      await resetUserAttempts(id);
+      await loadUsers(page);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset attempts.');
     } finally {
       setIsSubmitting(false);
     }
@@ -96,6 +121,7 @@ const UserManagement: React.FC = () => {
               <tr className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold">
                 <th className="px-6 py-4">User</th>
                 <th className="px-6 py-4">Role</th>
+                <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4">Progress</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
@@ -103,7 +129,7 @@ const UserManagement: React.FC = () => {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-6 text-sm text-slate-500">Loading users...</td>
+                  <td colSpan={5} className="px-6 py-6 text-sm text-slate-500">Loading users...</td>
                 </tr>
               ) : users.map((u) => (
                 <tr key={u.id} className="bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
@@ -125,19 +151,40 @@ const UserManagement: React.FC = () => {
                       {u.role}
                     </span>
                   </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 rounded text-xs font-bold border ${
+                      u.status === UserStatus.ACTIVE
+                        ? 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800'
+                        : 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800'
+                    }`}>
+                      {u.status}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
                     <span className="font-medium text-slate-800 dark:text-white">{u.points}</span> PTS / {u.completedModules} Modules
                   </td>
                   <td className="px-6 py-4 text-right">
                     {u.id !== currentUser?.id && (
-                      <button 
-                        onClick={() => void handleDelete(u.id)}
-                        disabled={isSubmitting}
-                        className="p-2 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors"
-                        title="Revoke Access"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      <div className="flex justify-end items-center gap-1">
+                        <button
+                          onClick={() => void handleResetAttempts(u.id)}
+                          disabled={isSubmitting}
+                          className="p-2 rounded hover:bg-amber-50 dark:hover:bg-amber-900/20 text-slate-400 hover:text-amber-500 transition-colors"
+                          title="Reset Attempts"
+                        >
+                          <RotateCcw size={18} />
+                        </button>
+                        {u.status !== UserStatus.SUSPENDED && (
+                          <button
+                            onClick={() => void handleSuspend(u.id)}
+                            disabled={isSubmitting}
+                            className="p-2 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors"
+                            title="Suspend User"
+                          >
+                            <UserX size={18} />
+                          </button>
+                        )}
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -145,6 +192,31 @@ const UserManagement: React.FC = () => {
             </tbody>
           </table>
         </div>
+        {meta && (
+          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-700">
+            <div className="text-xs text-slate-500">
+              Page {meta.current_page} of {meta.last_page} ({meta.total} users)
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void loadUsers(page - 1)}
+                disabled={isSubmitting || isLoading || page <= 1}
+                className="px-3 py-1.5 text-xs font-semibold rounded border border-slate-300 text-slate-600 disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                onClick={() => void loadUsers(page + 1)}
+                disabled={isSubmitting || isLoading || (meta.current_page >= meta.last_page)}
+                className="px-3 py-1.5 text-xs font-semibold rounded border border-slate-300 text-slate-600 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Registration Modal */}

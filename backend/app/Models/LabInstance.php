@@ -30,6 +30,7 @@ class LabInstance extends Model
         'assigned_port',
         'connection_url',
         'runtime_metadata',
+        'last_error',
     ];
 
     protected function casts(): array

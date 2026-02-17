@@ -1,4 +1,5 @@
-import { LabTemplate, LabDetailResponse, LabInstance, LabStatus, LabDifficulty, LabChangelog, LabConfiguration } from '../types';
+import { LabTemplate, LabDetailResponse, LabInstance, LabStatus, LabDifficulty, LabConfiguration } from '../types';
+import { apiClient } from '../../../services/apiClient';
 
 // Mock delay helper
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -189,100 +190,56 @@ export const labService = {
   // --- ADMIN METHODS ---
 
   getAllLabsAdmin: async (): Promise<LabTemplate[]> => {
-    await delay(500);
-    return getStoredLabs();
+    const response = await apiClient.get<{ data: LabTemplate[] }>('/api/v1/admin/labs?per_page=100');
+    return response.data;
   },
 
   createLab: async (data: Partial<LabTemplate>): Promise<LabTemplate> => {
-    await delay(500);
-    const labs = getStoredLabs();
-    
-    const newLab: LabTemplate = {
-      id: `l-${Date.now()}`,
-      slug: data.slug || `lab-${Date.now()}`,
-      title: data.title || 'Untitled Lab',
-      difficulty: data.difficulty || LabDifficulty.EASY,
-      category: data.category || 'General',
-      short_description: data.short_description || '',
-      long_description: data.long_description || '# New Lab',
-      prerequisites: data.prerequisites || [],
-      estimated_time_minutes: data.estimated_time_minutes || 60,
-      objectives: data.objectives || [],
-      tags: data.tags || [],
-      version: '0.0.1',
-      status: LabStatus.DRAFT,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      changelog: [],
-      configuration: {
-        type: 'docker-compose',
-        content: DEFAULT_COMPOSE,
-        base_port: 80
-      },
-      ...data
-    } as LabTemplate;
-
-    saveLabs([...labs, newLab]);
-    return newLab;
+    return apiClient.post<LabTemplate>('/api/v1/admin/labs', toAdminLabPayload(data));
   },
 
   updateLab: async (id: string, data: Partial<LabTemplate>): Promise<LabTemplate> => {
-    await delay(500);
-    const labs = getStoredLabs();
-    const idx = labs.findIndex(l => l.id === id);
-    if (idx === -1) throw new Error('Lab not found');
-
-    const updated = {
-      ...labs[idx],
-      ...data,
-      updated_at: new Date().toISOString()
-    };
-    
-    labs[idx] = updated;
-    saveLabs(labs);
-    return updated;
+    return apiClient.patch<LabTemplate>(`/api/v1/admin/labs/${id}`, toAdminLabPayload(data));
   },
 
   publishLab: async (id: string, version: string, notes: string): Promise<LabTemplate> => {
-    await delay(800);
-    const labs = getStoredLabs();
-    const idx = labs.findIndex(l => l.id === id);
-    if (idx === -1) throw new Error('Lab not found');
-
-    const lab = labs[idx];
-    const entry: LabChangelog = {
-      version,
-      date: new Date().toISOString(),
-      notes
-    };
-
-    const updated = {
-      ...lab,
-      version,
-      status: LabStatus.PUBLISHED,
-      updated_at: new Date().toISOString(),
-      changelog: [entry, ...(lab.changelog || [])]
-    };
-
-    labs[idx] = updated;
-    saveLabs(labs);
-    return updated;
+    return apiClient.post<LabTemplate>(`/api/v1/admin/labs/${id}/publish`, { version, notes });
   },
 
   archiveLab: async (id: string): Promise<void> => {
-    await delay(300);
-    const labs = getStoredLabs();
-    const idx = labs.findIndex(l => l.id === id);
-    if (idx !== -1) {
-      labs[idx].status = LabStatus.ARCHIVED;
-      saveLabs(labs);
-    }
+    await apiClient.post<LabTemplate>(`/api/v1/admin/labs/${id}/archive`);
   },
 
   deleteLab: async (id: string): Promise<void> => {
-    await delay(500);
-    const labs = getStoredLabs();
-    const filtered = labs.filter(l => l.id !== id);
-    saveLabs(filtered);
+    await apiClient.delete<void>(`/api/v1/admin/labs/${id}`);
   }
+};
+
+const toAdminLabPayload = (data: Partial<LabTemplate>): Record<string, unknown> => {
+  const configuration = data.configuration as LabConfiguration | undefined;
+  const internalPort = configuration?.base_port ?? 80;
+  const composeYaml = configuration?.content ?? DEFAULT_COMPOSE;
+
+  return {
+    title: data.title,
+    slug: data.slug,
+    difficulty: data.difficulty,
+    category: data.category,
+    est_minutes: data.estimated_time_minutes,
+    estimated_time_minutes: data.estimated_time_minutes,
+    short_description: data.short_description,
+    guide_markdown: data.long_description,
+    long_description: data.long_description,
+    tags: data.tags ?? [],
+    objectives: data.objectives ?? [],
+    prerequisites: data.prerequisites ?? [],
+    version: data.version,
+    internal_port: internalPort,
+    docker_compose_yaml: composeYaml,
+    configuration: {
+      type: 'docker-compose',
+      content: composeYaml,
+      base_port: internalPort,
+    },
+  };
 };

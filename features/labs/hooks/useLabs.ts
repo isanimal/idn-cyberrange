@@ -96,21 +96,23 @@ export const useAdminLabs = () => {
 export const useAdminLabMutations = (onSuccess: () => void) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const createLab = async (data: Partial<LabTemplate>) => {
+  const createLab = async (data: Partial<LabTemplate>): Promise<LabTemplate> => {
     setIsSubmitting(true);
     try {
-      await labService.createLab(data);
+      const created = await labService.createLab(data);
       onSuccess();
+      return created;
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const updateLab = async (id: string, data: Partial<LabTemplate>) => {
+  const updateLab = async (id: string, data: Partial<LabTemplate>): Promise<LabTemplate> => {
     setIsSubmitting(true);
     try {
-      await labService.updateLab(id, data);
+      const updated = await labService.updateLab(id, data);
       onSuccess();
+      return updated;
     } finally {
       setIsSubmitting(false);
     }

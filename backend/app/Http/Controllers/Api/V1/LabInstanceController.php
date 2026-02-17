@@ -28,6 +28,11 @@ class LabInstanceController extends Controller
         return response()->json(new LabInstanceResource($instance), 201);
     }
 
+    public function start(ActivateLabRequest $request, string $id): JsonResponse
+    {
+        return $this->activate($request, $id);
+    }
+
     public function deactivate(Request $request, string $instance_id): JsonResponse
     {
         $instance = $this->instances->deactivate($instance_id, $request->user());

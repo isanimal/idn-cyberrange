@@ -31,4 +31,17 @@ class LabInstanceApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('state', 'INACTIVE');
     }
+
+    public function test_user_can_start_instance_via_start_alias(): void
+    {
+        $user = User::factory()->create();
+        $template = LabTemplate::factory()->create([
+            'status' => LabTemplateStatus::PUBLISHED,
+            'docker_image' => 'nginx:alpine',
+            'internal_port' => 80,
+        ]);
+
+        $start = $this->actingAs($user, 'sanctum')->postJson('/api/v1/labs/'.$template->id.'/start');
+        $start->assertStatus(201)->assertJsonStructure(['instance_id', 'state', 'connection_url']);
+    }
 }

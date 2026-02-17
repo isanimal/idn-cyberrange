@@ -10,6 +10,15 @@ interface BackendUser {
   status: UserStatus;
   created_at?: string;
   updated_at?: string;
+  points?: number;
+  completedModules?: number;
+}
+
+interface UsersPaginationMeta {
+  current_page: number;
+  last_page: number;
+  total: number;
+  per_page?: number;
 }
 
 interface AuthContextType {
@@ -19,7 +28,9 @@ interface AuthContextType {
   isLoading: boolean;
   registerUser: (newUser: { name: string; email: string; password: string; role: UserRole }) => Promise<void>;
   getAllUsers: () => User[];
-  fetchUsers: () => Promise<User[]>;
+  fetchUsers: (page?: number) => Promise<{ data: User[]; meta: UsersPaginationMeta }>;
+  suspendUser: (id: string) => Promise<void>;
+  resetUserAttempts: (id: string) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   refreshMe: () => Promise<void>;
 }
@@ -42,8 +53,8 @@ const toDataAvatar = (email: string, name: string): string => {
 
 const toViewUser = (backendUser: BackendUser): User => ({
   ...backendUser,
-  points: 0,
-  completedModules: 0,
+  points: backendUser.points ?? 0,
+  completedModules: backendUser.completedModules ?? 0,
   rank: backendUser.role === UserRole.ADMIN ? 'Administrator' : 'Member',
   avatarUrl: toDataAvatar(backendUser.email, backendUser.name),
 });
@@ -119,15 +130,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     forceLocalLogout();
   };
 
-  const fetchUsers = async (): Promise<User[]> => {
-    const response = await apiClient.get<{ data: BackendUser[]; meta: Record<string, unknown> }>('/api/v1/admin/users');
+  const fetchUsers = async (page = 1): Promise<{ data: User[]; meta: UsersPaginationMeta }> => {
+    const response = await apiClient.get<{ data: BackendUser[]; meta: UsersPaginationMeta }>(`/api/v1/admin/users?page=${page}`);
     const mapped = response.data.map(toViewUser);
     setUsers(mapped);
-    return mapped;
+    return { data: mapped, meta: response.meta };
   };
 
   const registerUser = async (newUser: { name: string; email: string; password: string; role: UserRole }): Promise<void> => {
     await apiClient.post<BackendUser>('/api/v1/admin/users', newUser);
+  };
+
+  const suspendUser = async (id: string): Promise<void> => {
+    await apiClient.patch<BackendUser>(`/api/v1/admin/users/${id}/suspend`);
+  };
+
+  const resetUserAttempts = async (id: string): Promise<void> => {
+    await apiClient.patch<BackendUser>(`/api/v1/admin/users/${id}`, { reset_attempts: true });
   };
 
   const deleteUser = async (id: string): Promise<void> => {
@@ -143,6 +162,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       registerUser,
       getAllUsers: () => users,
       fetchUsers,
+      suspendUser,
+      resetUserAttempts,
       deleteUser,
       refreshMe,
     }),

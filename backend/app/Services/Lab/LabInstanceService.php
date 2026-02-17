@@ -10,6 +10,7 @@ use App\Services\Audit\AuditLogService;
 use App\Services\Orchestration\LabOrchestratorService;
 use App\Services\Orchestration\PortAllocatorService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Throwable;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class LabInstanceService
@@ -52,8 +53,18 @@ class LabInstanceService
             ]);
         }
 
-        $port = $instance->assigned_port ?: $this->ports->allocate($instance->id);
-        $instance = $this->orchestrator->startInstance($instance, $template, $port);
+        try {
+            $port = $instance->assigned_port ?: $this->ports->allocate($instance->id);
+            $instance = $this->orchestrator->startInstance($instance, $template, $port);
+        } catch (Throwable $e) {
+            $this->instances->update($instance, [
+                'state' => LabInstanceState::ABANDONED,
+                'last_activity_at' => now(),
+                'last_error' => $e->getMessage(),
+            ]);
+
+            throw new HttpException(500, 'Failed to start lab instance.');
+        }
 
         $instance = $this->instances->update($instance, [
             'lab_template_id' => $template->id,
@@ -61,6 +72,7 @@ class LabInstanceService
             'state' => LabInstanceState::ACTIVE,
             'last_activity_at' => now(),
             'attempts_count' => $instance->attempts_count + 1,
+            'last_error' => null,
         ]);
 
         $this->audit->log('LAB_INSTANCE_ACTIVATED', $user->id, 'LabInstance', $instance->id, [
@@ -74,13 +86,22 @@ class LabInstanceService
     public function deactivate(string $instanceId, User $user): LabInstance
     {
         $instance = $this->findInstanceForUserOrFail($instanceId, $user);
-        $instance = $this->orchestrator->stopInstance($instance);
+        try {
+            $instance = $this->orchestrator->stopInstance($instance);
+        } catch (Throwable $e) {
+            $this->instances->update($instance, [
+                'last_activity_at' => now(),
+                'last_error' => $e->getMessage(),
+            ]);
+            throw new HttpException(500, 'Failed to stop lab instance.');
+        }
 
         $this->ports->releaseByInstance($instance->id);
 
         $instance = $this->instances->update($instance, [
             'state' => LabInstanceState::INACTIVE,
             'last_activity_at' => now(),
+            'last_error' => null,
         ]);
 
         $this->audit->log('LAB_INSTANCE_DEACTIVATED', $user->id, 'LabInstance', $instance->id);
@@ -91,9 +112,20 @@ class LabInstanceService
     public function restart(string $instanceId, User $user): LabInstance
     {
         $instance = $this->findInstanceForUserOrFail($instanceId, $user);
-        $instance = $this->orchestrator->restartInstance($instance);
+        try {
+            $instance = $this->orchestrator->restartInstance($instance);
+        } catch (Throwable $e) {
+            $this->instances->update($instance, [
+                'last_activity_at' => now(),
+                'last_error' => $e->getMessage(),
+            ]);
+            throw new HttpException(500, 'Failed to restart lab instance.');
+        }
 
-        return $this->instances->update($instance, ['last_activity_at' => now()]);
+        return $this->instances->update($instance, [
+            'last_activity_at' => now(),
+            'last_error' => null,
+        ]);
     }
 
     public function updateInstance(string $instanceId, User $user, array $data): LabInstance
@@ -177,6 +209,24 @@ class LabInstanceService
         return $this->instances->update($instance, [
             'state' => LabInstanceState::INACTIVE,
             'last_activity_at' => now(),
+            'last_error' => null,
+        ]);
+    }
+
+    public function forceRestartByAdmin(string $instanceId): LabInstance
+    {
+        $instance = $this->instances->findById($instanceId);
+
+        if (! $instance) {
+            throw new \Illuminate\Database\Eloquent\ModelNotFoundException('Lab instance not found.');
+        }
+
+        $instance = $this->orchestrator->restartInstance($instance);
+
+        return $this->instances->update($instance, [
+            'state' => LabInstanceState::ACTIVE,
+            'last_activity_at' => now(),
+            'last_error' => null,
         ]);
     }
 
