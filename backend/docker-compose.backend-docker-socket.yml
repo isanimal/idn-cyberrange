@@ -1,0 +1,15 @@
+services:
+  app:
+    # Required when backend runs inside container and must orchestrate Docker labs.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/idn-cyberrange:/var/lib/idn-cyberrange
+    # Recommended when host daemon uses userns-remap.
+    userns_mode: host
+    # Option A (simple): run as root so socket is accessible.
+    user: "0:0"
+    # Option B (safer): remove user above and map host docker group gid:
+    # group_add:
+    #   - "${DOCKER_GID}"
+    # Last resort only (broad privileges, avoid in production unless needed):
+    # privileged: true

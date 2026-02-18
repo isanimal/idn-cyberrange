@@ -3,6 +3,7 @@
 namespace App\Services\Lab;
 
 use App\Enums\LabInstanceState;
+use App\Exceptions\OrchestrationOperationException;
 use App\Models\LabInstance;
 use App\Models\Module;
 use App\Models\ModuleLabTemplate;
@@ -10,6 +11,7 @@ use App\Models\User;
 use App\Repositories\Contracts\LabInstanceRepositoryInterface;
 use App\Services\Audit\AuditLogService;
 use App\Services\Orchestration\LabOrchestratorService;
+use App\Services\Orchestration\OrchestrationPreflightService;
 use App\Services\Orchestration\PortAllocatorService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Throwable;
@@ -23,6 +25,7 @@ class LabInstanceService
         private readonly LabOrchestratorService $orchestrator,
         private readonly PortAllocatorService $ports,
         private readonly AuditLogService $audit,
+        private readonly OrchestrationPreflightService $preflight,
     ) {
     }
 
@@ -86,7 +89,12 @@ class LabInstanceService
                 'last_error' => $e->getMessage(),
             ]);
 
-            throw new HttpException(500, 'Failed to start lab instance.');
+            throw new OrchestrationOperationException(
+                'LAB_START_FAILED',
+                $this->humanizeRuntimeError($e->getMessage(), 'start'),
+                $this->buildOperationDetails('start', $e),
+                503
+            );
         }
 
         $instance = $this->instances->update($instance, [
@@ -118,7 +126,12 @@ class LabInstanceService
                 'last_activity_at' => now(),
                 'last_error' => $e->getMessage(),
             ]);
-            throw new HttpException(500, 'Failed to stop lab instance.');
+            throw new OrchestrationOperationException(
+                'LAB_STOP_FAILED',
+                $this->humanizeRuntimeError($e->getMessage(), 'stop'),
+                $this->buildOperationDetails('stop', $e),
+                503
+            );
         }
 
         $this->ports->releaseByInstance($instance->id);
@@ -144,7 +157,12 @@ class LabInstanceService
                 'last_activity_at' => now(),
                 'last_error' => $e->getMessage(),
             ]);
-            throw new HttpException(500, 'Failed to restart lab instance.');
+            throw new OrchestrationOperationException(
+                'LAB_RESTART_FAILED',
+                $this->humanizeRuntimeError($e->getMessage(), 'restart'),
+                $this->buildOperationDetails('restart', $e),
+                503
+            );
         }
 
         return $this->instances->update($instance, [
@@ -275,5 +293,75 @@ class LabInstanceService
 
         return (int) ($currentTemplate->configuration_base_port ?? $currentTemplate->internal_port) ===
             (int) ($targetTemplate->configuration_base_port ?? $targetTemplate->internal_port);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildOperationDetails(string $operation, Throwable $e): array
+    {
+        $report = $this->preflight->run();
+
+        return [
+            'operation' => $operation,
+            'raw_error' => $e->getMessage(),
+            'hints' => $this->extractHints($report),
+            'preflight' => $report,
+        ];
+    }
+
+    private function humanizeRuntimeError(string $raw, string $operation): string
+    {
+        $normalized = strtolower($raw);
+        $prefix = match ($operation) {
+            'start' => 'Failed to start lab instance.',
+            'stop' => 'Failed to stop lab instance.',
+            'restart' => 'Failed to restart lab instance.',
+            default => 'Lab runtime operation failed.',
+        };
+
+        if (str_contains($normalized, 'permission denied') && str_contains($normalized, 'docker.sock')) {
+            return $prefix.' Docker daemon unreachable / permission denied on socket. Check remediation hints in details.preflight.';
+        }
+
+        if (str_contains($normalized, 'failed to create workdir')) {
+            return $prefix.' Runtime workdir is not writable. Check remediation hints in details.preflight.';
+        }
+
+        if (str_contains($normalized, 'cannot connect to the docker daemon')) {
+            return $prefix.' Docker daemon unreachable. Check remediation hints in details.preflight.';
+        }
+
+        return $prefix.' '.$raw;
+    }
+
+    /**
+     * @param  array<string, mixed>  $report
+     * @return array<int, string>
+     */
+    private function extractHints(array $report): array
+    {
+        $hints = [];
+        $checks = $report['checks'] ?? [];
+        if (! is_array($checks)) {
+            return $hints;
+        }
+
+        foreach (['workdir', 'docker'] as $key) {
+            $node = $checks[$key] ?? null;
+            if (! is_array($node)) {
+                continue;
+            }
+            $nodeHints = $node['hints'] ?? [];
+            if (is_array($nodeHints)) {
+                foreach ($nodeHints as $hint) {
+                    if (is_string($hint) && $hint !== '') {
+                        $hints[] = $hint;
+                    }
+                }
+            }
+        }
+
+        return array_values(array_unique($hints));
     }
 }

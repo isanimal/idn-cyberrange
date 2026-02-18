@@ -73,7 +73,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
     try {
       const payload = await response.json();
-      message = payload?.message ?? payload?.error ?? message;
+      const hints = Array.isArray(payload?.details?.hints)
+        ? payload.details.hints.filter((value: unknown): value is string => typeof value === 'string' && value.trim() !== '')
+        : [];
+      const baseMessage = payload?.message ?? payload?.error ?? message;
+      message = hints.length > 0 ? `${baseMessage} Suggested fix: ${hints[0]}` : baseMessage;
     } catch {
       // ignore json parse errors for non-json responses
     }

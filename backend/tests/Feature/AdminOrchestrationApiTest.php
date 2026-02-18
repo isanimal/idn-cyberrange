@@ -8,7 +8,9 @@ use App\Enums\UserRole;
 use App\Models\LabInstance;
 use App\Models\LabTemplate;
 use App\Models\User;
+use App\Services\Orchestration\OrchestrationPreflightService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Mockery;
 use Tests\TestCase;
 
 class AdminOrchestrationApiTest extends TestCase
@@ -109,6 +111,45 @@ class AdminOrchestrationApiTest extends TestCase
                     'memAllocated',
                     'errors',
                     'instances',
+                ],
+            ]);
+    }
+
+    public function test_admin_can_view_preflight_report_with_structured_errors(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::ADMIN]);
+
+        $mock = Mockery::mock(OrchestrationPreflightService::class);
+        $mock->shouldReceive('run')->once()->andReturn([
+            'ok' => false,
+            'checked_at' => now()->toIso8601String(),
+            'checks' => [
+                'workdir' => [
+                    'ok' => false,
+                    'message' => 'Runtime workdir root is not writable.',
+                    'hints' => ['Mount writable /var/lib/idn-cyberrange in backend container.'],
+                ],
+                'docker' => [
+                    'ok' => false,
+                    'message' => 'Docker daemon unreachable.',
+                    'hints' => ['Mount /var/run/docker.sock and set userns_mode: host.'],
+                ],
+            ],
+        ]);
+        $this->app->instance(OrchestrationPreflightService::class, $mock);
+
+        $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/v1/admin/orchestration/preflight')
+            ->assertStatus(503)
+            ->assertJsonPath('data.ok', false)
+            ->assertJsonStructure([
+                'data' => [
+                    'ok',
+                    'checked_at',
+                    'checks' => [
+                        'workdir' => ['ok', 'message', 'hints'],
+                        'docker' => ['ok', 'message', 'hints'],
+                    ],
                 ],
             ]);
     }

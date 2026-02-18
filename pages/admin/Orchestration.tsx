@@ -36,6 +36,16 @@ interface OrchestrationOverviewPayload {
   };
 }
 
+interface PreflightPayload {
+  data: {
+    ok: boolean;
+    checks: {
+      workdir: { ok: boolean; message: string; error?: string; hints?: string[] };
+      docker: { ok: boolean; message: string; error?: string; hints?: string[] };
+    };
+  };
+}
+
 const formatUptime = (seconds: number): string => {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -51,6 +61,7 @@ const Orchestration: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [resourceHistory, setResourceHistory] = useState<Array<{ time: string; cpu: number | null; memory: number | null }>>([]);
+  const [preflightWarnings, setPreflightWarnings] = useState<string[]>([]);
   const [overviewStats, setOverviewStats] = useState<{
     activeContainers: number;
     avgCpu: number;
@@ -67,6 +78,18 @@ const Orchestration: React.FC = () => {
     setIsLoading(true);
     setError('');
     try {
+      try {
+        const preflight = await apiClient.get<PreflightPayload>('/api/v1/admin/orchestration/preflight');
+        const hints = [
+          ...(preflight.data.checks.workdir.hints ?? []),
+          ...(preflight.data.checks.docker.hints ?? []),
+        ];
+        setPreflightWarnings(preflight.data.ok ? [] : Array.from(new Set(hints)));
+      } catch (preflightError) {
+        const message = preflightError instanceof Error ? preflightError.message : 'Orchestration preflight failed.';
+        setPreflightWarnings([message]);
+      }
+
       const response = await apiClient.get<OrchestrationOverviewPayload>('/api/v1/admin/orchestration/overview');
       setInstances(response.data.instances);
       setOverviewStats({
@@ -160,6 +183,15 @@ const Orchestration: React.FC = () => {
       {error && (
         <div className="bg-red-50 text-red-600 border border-red-100 px-4 py-3 rounded-lg text-sm">
           {error}
+        </div>
+      )}
+
+      {preflightWarnings.length > 0 && (
+        <div className="bg-amber-50 text-amber-800 border border-amber-200 px-4 py-3 rounded-lg text-sm space-y-1">
+          <div className="font-semibold">Orchestration preflight has issues</div>
+          {preflightWarnings.slice(0, 4).map((hint, idx) => (
+            <div key={`${idx}-${hint}`}>• {hint}</div>
+          ))}
         </div>
       )}
 

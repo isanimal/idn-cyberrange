@@ -117,6 +117,7 @@ Route::prefix('v1')->group(function (): void {
 
             Route::get('/orchestration/instances', [AdminOrchestrationController::class, 'index']);
             Route::get('/orchestration/overview', [AdminOrchestrationController::class, 'overview']);
+            Route::get('/orchestration/preflight', [AdminOrchestrationController::class, 'preflight']);
             Route::post('/orchestration/instances/{instance_id}/force-stop', [AdminOrchestrationController::class, 'forceStop']);
             Route::post('/orchestration/instances/{instance_id}/restart', [AdminOrchestrationController::class, 'restart']);
         });

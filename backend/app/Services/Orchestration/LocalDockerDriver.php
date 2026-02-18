@@ -10,6 +10,8 @@ class LocalDockerDriver implements LabDriverInterface
 {
     public function startInstance(LabInstance $instance, LabTemplate $template, int $assignedPort): array
     {
+        $this->assertValidPort($assignedPort);
+
         $workdir = rtrim((string) config('labs.runtime_root'), '/').'/'.$instance->id;
         $composePath = $workdir.'/docker-compose.yml';
         $projectName = 'lab_'.str_replace('-', '', substr($instance->id, 0, 12));
@@ -22,29 +24,25 @@ class LocalDockerDriver implements LabDriverInterface
         file_put_contents($composePath, $composeContent);
 
         if (! app()->environment('testing')) {
-            $process = new Process([
-                'docker', 'compose',
+            $process = $this->makeComposeProcess([
                 '--project-name', $projectName,
                 '-f', $composePath,
                 'up', '-d', '--remove-orphans',
-            ]);
-            $process->setTimeout((int) config('labs.compose_timeout_seconds', 30));
+            ], $assignedPort);
             $process->run();
 
             if (! $process->isSuccessful()) {
-                throw new \RuntimeException('Failed to start lab instance: '.$process->getErrorOutput());
+                throw new \RuntimeException($this->formatComposeError('start', $process));
             }
         }
 
         $containerId = null;
         if (! app()->environment('testing')) {
-            $ps = new Process([
-                'docker', 'compose',
+            $ps = $this->makeComposeProcess([
                 '--project-name', $projectName,
                 '-f', $composePath,
                 'ps', '-q', 'app',
-            ]);
-            $ps->setTimeout((int) config('labs.compose_timeout_seconds', 30));
+            ], $assignedPort);
             $ps->run();
             if ($ps->isSuccessful()) {
                 $containerId = trim($ps->getOutput()) ?: null;
@@ -81,17 +79,16 @@ class LocalDockerDriver implements LabDriverInterface
         $projectName = (string) (data_get($instance->runtime_metadata, 'project_name') ?: 'lab_'.str_replace('-', '', substr($instance->id, 0, 12)));
 
         if ($composePath && ! app()->environment('testing')) {
-            $process = new Process([
-                'docker', 'compose',
+            $port = $this->extractPort($instance);
+            $process = $this->makeComposeProcess([
                 '--project-name', $projectName,
                 '-f', $composePath,
                 'down', '--volumes', '--remove-orphans',
-            ]);
-            $process->setTimeout((int) config('labs.compose_timeout_seconds', 30));
+            ], $port);
             $process->run();
 
             if (! $process->isSuccessful()) {
-                throw new \RuntimeException('Failed to stop lab instance: '.$process->getErrorOutput());
+                throw new \RuntimeException($this->formatComposeError('stop', $process));
             }
         }
 
@@ -104,17 +101,16 @@ class LocalDockerDriver implements LabDriverInterface
         $projectName = (string) (data_get($instance->runtime_metadata, 'project_name') ?: 'lab_'.str_replace('-', '', substr($instance->id, 0, 12)));
 
         if ($composePath && ! app()->environment('testing')) {
-            $process = new Process([
-                'docker', 'compose',
+            $port = $this->extractPort($instance);
+            $process = $this->makeComposeProcess([
                 '--project-name', $projectName,
                 '-f', $composePath,
                 'restart',
-            ]);
-            $process->setTimeout((int) config('labs.compose_timeout_seconds', 30));
+            ], $port);
             $process->run();
 
             if (! $process->isSuccessful()) {
-                throw new \RuntimeException('Failed to restart lab instance: '.$process->getErrorOutput());
+                throw new \RuntimeException($this->formatComposeError('restart', $process));
             }
         }
 
@@ -128,13 +124,12 @@ class LocalDockerDriver implements LabDriverInterface
         $projectName = (string) (data_get($instance->runtime_metadata, 'project_name') ?: 'lab_'.str_replace('-', '', substr($instance->id, 0, 12)));
 
         if ($composePath && ! app()->environment('testing')) {
-            $process = new Process([
-                'docker', 'compose',
+            $port = $this->extractPort($instance);
+            $process = $this->makeComposeProcess([
                 '--project-name', $projectName,
                 '-f', $composePath,
                 'down', '--volumes', '--remove-orphans',
-            ]);
-            $process->setTimeout((int) config('labs.compose_timeout_seconds', 30));
+            ], $port);
             $process->run();
         }
 
@@ -157,6 +152,8 @@ class LocalDockerDriver implements LabDriverInterface
 
     private function renderCompose(LabInstance $instance, LabTemplate $template, int $assignedPort): string
     {
+        $this->assertValidPort($assignedPort);
+
         $raw = trim((string) ($template->configuration_content ?? ''));
 
         if ($raw !== '' && strlen($raw) <= 65535 && $this->isComposeSafe($raw)) {
@@ -265,8 +262,7 @@ class LocalDockerDriver implements LabDriverInterface
         $cpuLimit = (string) ($template->resource_limits['cpus'] ?? config('labs.default_cpu_limit', '0.5'));
         $networkName = 'lab_'.$instance->id;
 
-        return "version: '3.9'\n"
-            ."services:\n"
+        return "services:\n"
             ."  app:\n"
             ."    image: {$image}\n"
             ."    ports:\n"
@@ -292,6 +288,56 @@ class LocalDockerDriver implements LabDriverInterface
             ."networks:\n"
             ."  {$networkName}:\n"
             ."    driver: bridge\n";
+    }
+
+    private function makeComposeProcess(array $args, ?int $port = null): Process
+    {
+        $command = array_merge(['docker', 'compose'], $args);
+        $process = new Process($command);
+        $process->setTimeout((int) config('labs.compose_timeout_seconds', 30));
+
+        $env = $_ENV;
+        if ($port !== null) {
+            $this->assertValidPort($port);
+            $env['PORT'] = (string) $port;
+        }
+        $process->setEnv($env);
+
+        return $process;
+    }
+
+    private function assertValidPort(int $port): void
+    {
+        if ($port < 1 || $port > 65535) {
+            throw new \RuntimeException("Invalid PORT '{$port}'. Port must be numeric and between 1..65535.");
+        }
+    }
+
+    private function extractPort(LabInstance $instance): ?int
+    {
+        $port = $instance->assigned_port;
+        if ($port === null) {
+            $metaPort = data_get($instance->runtime_metadata, 'assigned_port');
+            $port = is_numeric($metaPort) ? (int) $metaPort : null;
+        }
+
+        return is_int($port) ? $port : null;
+    }
+
+    private function formatComposeError(string $action, Process $process): string
+    {
+        $error = trim($process->getErrorOutput().' '.$process->getOutput());
+        $prefix = "Failed to {$action} lab instance via docker compose.";
+        $normalized = strtolower($error);
+
+        if (str_contains($normalized, 'permission denied') && str_contains($normalized, 'docker.sock')) {
+            return $prefix." Docker socket permission denied (/var/run/docker.sock). "
+                ."If backend runs on host, add service user to docker group. "
+                ."If backend runs in container, mount /var/run/docker.sock and run as root or map docker group gid. "
+                ."Raw error: {$error}";
+        }
+
+        return $prefix.' '.$error;
     }
 
     private function inspectContainerNetwork(string $containerId): array

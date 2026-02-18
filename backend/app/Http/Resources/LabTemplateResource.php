@@ -11,7 +11,7 @@ class LabTemplateResource extends JsonResource
     {
         $configType = $this->configuration_type ?? 'docker-compose';
         $configContent = $this->configuration_content
-            ?? ("version: '3.9'\nservices:\n  app:\n    image: ".($this->docker_image ?? 'nginx:alpine')."\n    ports:\n      - \"\\$".'{PORT}:'.($this->internal_port ?? 80)."\"\n");
+            ?? ("services:\n  app:\n    image: ".($this->docker_image ?? 'nginx:alpine')."\n    ports:\n      - \"\\$".'{PORT}:'.($this->internal_port ?? 80)."\"\n");
 
         return [
             'id' => $this->id,

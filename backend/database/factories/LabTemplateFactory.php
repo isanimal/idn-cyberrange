@@ -37,7 +37,7 @@ class LabTemplateFactory extends Factory
             'env_vars' => ['APP_ENV' => 'training'],
             'resource_limits' => ['memory' => '256m'],
             'configuration_type' => 'docker-compose',
-            'configuration_content' => "version: '3.9'\nservices:\n  app:\n    image: nginx:alpine\n    ports:\n      - \"\\$".'{PORT}:'.$basePort."\"\n",
+            'configuration_content' => "services:\n  app:\n    image: nginx:alpine\n    ports:\n      - \"\\$".'{PORT}:'.$basePort."\"\n",
             'configuration_base_port' => $basePort,
         ];
     }

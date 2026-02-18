@@ -72,7 +72,7 @@ class DashboardSeeder extends Seeder
                 'docker_image' => 'nginx:alpine',
                 'internal_port' => 80,
                 'configuration_type' => 'docker-compose',
-                'configuration_content' => "version: '3.9'\nservices:\n  app:\n    image: nginx:alpine\n    ports:\n      - \"\\$".'{PORT}:80"'."\n",
+                'configuration_content' => "services:\n  app:\n    image: nginx:alpine\n    ports:\n      - \"\\$".'{PORT}:80"'."\n",
                 'configuration_base_port' => 80,
             ]
         );

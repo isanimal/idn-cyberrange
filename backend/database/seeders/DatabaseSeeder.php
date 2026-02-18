@@ -107,7 +107,7 @@ class DatabaseSeeder extends Seeder
                     'docker_image' => $row['image'],
                     'internal_port' => $row['base_port'],
                     'configuration_type' => 'docker-compose',
-                    'configuration_content' => "version: '3.9'\nservices:\n  app:\n    image: {$row['image']}\n    ports:\n      - \"\\$".'{PORT}:'.$row['base_port']."\"\n",
+                    'configuration_content' => "services:\n  app:\n    image: {$row['image']}\n    ports:\n      - \"\\$".'{PORT}:'.$row['base_port']."\"\n",
                     'configuration_base_port' => $row['base_port'],
                     'env_vars' => ['APP_ENV' => 'training'],
                     'resource_limits' => ['memory' => '512m', 'cpus' => '0.5'],

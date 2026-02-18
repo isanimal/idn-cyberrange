@@ -7,6 +7,7 @@ use App\Models\LabInstance;
 use App\Services\Audit\AuditLogService;
 use App\Services\Lab\LabInstanceService;
 use App\Services\Orchestration\AdminOrchestrationInspector;
+use App\Services\Orchestration\OrchestrationPreflightService;
 use Illuminate\Http\JsonResponse;
 
 class AdminOrchestrationController extends Controller
@@ -15,7 +16,17 @@ class AdminOrchestrationController extends Controller
         private readonly LabInstanceService $instances,
         private readonly AuditLogService $audit,
         private readonly AdminOrchestrationInspector $inspector,
+        private readonly OrchestrationPreflightService $preflight,
     ) {
+    }
+
+    public function preflight(): JsonResponse
+    {
+        $report = $this->preflight->run();
+
+        return response()->json([
+            'data' => $report,
+        ], $report['ok'] ? 200 : 503);
     }
 
     public function index(): JsonResponse

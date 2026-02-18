@@ -40,6 +40,7 @@ Base path: `/api/v1`
 - `POST /admin/users/{id}/restore`
 - `GET /admin/orchestration/instances`
 - `GET /admin/orchestration/overview`
+- `GET /admin/orchestration/preflight`
 - `POST /admin/orchestration/instances/{instance_id}/force-stop`
 
 ## Modules (User)
@@ -107,6 +108,9 @@ Base path: `/api/v1`
 - `403` forbidden
 - `409` conflict
 - `429` submission/attempt/cooldown throttles
+- `503` orchestration preflight/runtime error
+  - payload:
+  - `{ error: "ORCHESTRATION_PREFLIGHT_FAILED" | "LAB_START_FAILED" | "LAB_STOP_FAILED" | "LAB_RESTART_FAILED", message: string, details?: { hints?: string[], preflight?: { ok, checks } } }`
 
 ## User Access Policy
 - Authenticated users with `status != ACTIVE` or `deleted_at != null` are blocked from user feature endpoints (`/modules`, `/labs`, `/lab-instances`, `/challenges`) with `403`.

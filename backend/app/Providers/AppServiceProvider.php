@@ -14,6 +14,7 @@ use App\Services\Orchestration\FakeDockerDriver;
 use App\Services\Orchestration\FutureK8sDriver;
 use App\Services\Orchestration\LabDriverInterface;
 use App\Services\Orchestration\LocalDockerDriver;
+use App\Services\Orchestration\OrchestrationPreflightService;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -40,6 +41,15 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        if (
+            config('labs.driver') === 'local_docker'
+            && config('labs.fail_fast_docker_check')
+            && ! app()->runningInConsole()
+            && ! app()->environment('testing')
+        ) {
+            app(OrchestrationPreflightService::class)->assertReady();
+        }
+
         Gate::define('admin-only', fn ($user) => $user?->isAdmin() === true);
 
         RateLimiter::for('challenge-submission', function (Request $request) {

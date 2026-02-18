@@ -106,7 +106,7 @@ export const labService = {
 };
 
 const PORT_PLACEHOLDER = '${PORT}';
-const DEFAULT_COMPOSE = `version: '3.9'\nservices:\n  app:\n    image: nginx:alpine\n    ports:\n      - "${PORT_PLACEHOLDER}:80"\n`;
+const DEFAULT_COMPOSE = `services:\n  app:\n    image: nginx:alpine\n    ports:\n      - "${PORT_PLACEHOLDER}:80"\n`;
 
 const toAdminLabPayload = (data: Partial<LabTemplate>): Record<string, unknown> => {
   const internalPort = data.configuration?.base_port ?? data.internal_port ?? 80;

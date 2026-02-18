@@ -2,6 +2,7 @@
 
 return [
     'driver' => env('DOCKER_LAB_DRIVER', 'local_docker'),
+    'fail_fast_docker_check' => filter_var(env('DOCKER_LAB_FAIL_FAST_DOCKER_CHECK', true), FILTER_VALIDATE_BOOL),
     'network' => env('DOCKER_LAB_NETWORK', 'labs'),
     'host' => env('DOCKER_LAB_HOST', '127.0.0.1'),
     'runtime_root' => env('DOCKER_LAB_RUNTIME_ROOT', '/var/lib/idn-cyberrange/instances'),

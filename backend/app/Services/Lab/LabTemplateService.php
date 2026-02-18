@@ -193,7 +193,7 @@ class LabTemplateService
         }
 
         if (! array_key_exists('configuration_content', $data) || $data['configuration_content'] === null) {
-            $data['configuration_content'] = "version: '3.9'\nservices:\n  app:\n    image: nginx:alpine\n    ports:\n      - \"\\$".'{PORT}:'.($data['internal_port'] ?? 80)."\"\n";
+            $data['configuration_content'] = "services:\n  app:\n    image: nginx:alpine\n    ports:\n      - \"\\$".'{PORT}:'.($data['internal_port'] ?? 80)."\"\n";
         }
 
         if (! array_key_exists('docker_image', $data)) {
