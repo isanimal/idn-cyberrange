@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import { AdminLesson, AdminModule, AdminModuleLevel, AdminModuleStatus } from '../../types';
 import { Edit2, Trash2, Plus, Lock, Unlock, Search, Save, X, BookOpen, Clock } from 'lucide-react';
-import { adminModulesApi } from '../../services/adminModulesApi';
+import { ModuleLabLinkItem, adminModulesApi } from '../../services/adminModulesApi';
+import { labService } from '../../features/labs/api/labService';
+import { LabTemplate } from '../../features/labs/types';
 
 const levelLabel: Record<AdminModuleLevel, string> = {
   basic: 'Basic',
@@ -42,6 +44,13 @@ const ModuleManagement: React.FC = () => {
   });
   const [assetFile, setAssetFile] = useState<File | null>(null);
   const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
+  const [isLabsModalOpen, setIsLabsModalOpen] = useState(false);
+  const [selectedModuleForLabs, setSelectedModuleForLabs] = useState<AdminModule | null>(null);
+  const [publishedLabs, setPublishedLabs] = useState<LabTemplate[]>([]);
+  const [linkedLabs, setLinkedLabs] = useState<ModuleLabLinkItem[]>([]);
+  const [selectedLabTemplateId, setSelectedLabTemplateId] = useState('');
+  const [linkOrder, setLinkOrder] = useState(1);
+  const [linkRequired, setLinkRequired] = useState(false);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -78,6 +87,16 @@ const ModuleManagement: React.FC = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load lessons.');
     }
+  };
+
+  const loadPublishedLabs = async () => {
+    const labs = await labService.getAllLabsAdmin();
+    setPublishedLabs(labs.filter((lab) => String(lab.status).toUpperCase() === 'PUBLISHED'));
+  };
+
+  const loadLinkedLabs = async (moduleId: string) => {
+    const links = await adminModulesApi.listModuleLabLinks(moduleId);
+    setLinkedLabs(links);
   };
 
   const handleEdit = (module: AdminModule) => {
@@ -183,6 +202,82 @@ const ModuleManagement: React.FC = () => {
     setAssetFormData({ url: '', caption: '', order_index: 1 });
     setIsLessonModalOpen(true);
     await loadLessons(module.id);
+  };
+
+  const handleManageLabs = async (module: AdminModule) => {
+    setSelectedModuleForLabs(module);
+    setIsLabsModalOpen(true);
+    setSelectedLabTemplateId('');
+    setLinkOrder(1);
+    setLinkRequired(false);
+    setError('');
+    setIsSubmitting(true);
+    try {
+      await Promise.all([loadPublishedLabs(), loadLinkedLabs(module.id)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load labs.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleLinkLab = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedModuleForLabs || !selectedLabTemplateId) {
+      return;
+    }
+
+    setError('');
+    setIsSubmitting(true);
+    try {
+      await adminModulesApi.linkModuleLab(selectedModuleForLabs.id, {
+        lab_template_id: selectedLabTemplateId,
+        order: linkOrder,
+        required: linkRequired,
+        type: 'LAB',
+      });
+      setSelectedLabTemplateId('');
+      setLinkOrder(linkedLabs.length + 1);
+      setLinkRequired(false);
+      await loadLinkedLabs(selectedModuleForLabs.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to link lab.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUnlinkLab = async (linkId: string) => {
+    if (!selectedModuleForLabs || !window.confirm('Unlink this lab from module?')) return;
+    setError('');
+    setIsSubmitting(true);
+    try {
+      await adminModulesApi.unlinkModuleLab(selectedModuleForLabs.id, linkId);
+      await loadLinkedLabs(selectedModuleForLabs.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to unlink lab.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateLink = async (link: ModuleLabLinkItem, patch: Partial<Pick<ModuleLabLinkItem, 'order' | 'required'>>) => {
+    if (!selectedModuleForLabs) return;
+    setError('');
+    setIsSubmitting(true);
+    try {
+      await adminModulesApi.linkModuleLab(selectedModuleForLabs.id, {
+        lab_template_id: link.lab_template_id,
+        order: patch.order ?? link.order,
+        required: patch.required ?? link.required,
+        type: link.type,
+      });
+      await loadLinkedLabs(selectedModuleForLabs.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update lab link.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSaveLesson = async (e: React.FormEvent) => {
@@ -459,6 +554,13 @@ const ModuleManagement: React.FC = () => {
                     >
                       <BookOpen size={14} />
                       {module.lessons_count} Lessons
+                    </button>
+                    <button
+                      onClick={() => void handleManageLabs(module)}
+                      className="mt-2 flex items-center gap-2 text-xs font-bold text-idn-600 dark:text-idn-400 hover:underline"
+                    >
+                      <Clock size={14} />
+                      Manage Labs
                     </button>
                   </td>
                   <td className="px-6 py-4">
@@ -942,6 +1044,105 @@ const ModuleManagement: React.FC = () => {
                     {lessonEditorTab === 'content' ? (editingLesson ? 'Update Lesson' : 'Add Lesson') : lessonEditorTab === 'tasks' ? (editingTaskId ? 'Update Task' : 'Add Task') : (editingAssetId ? 'Update Asset' : 'Add Asset')}
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isLabsModalOpen && selectedModuleForLabs && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl w-full max-w-3xl shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-700">
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white">Manage Module Labs: {selectedModuleForLabs.title}</h3>
+              <button onClick={() => setIsLabsModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5 overflow-y-auto">
+              <form onSubmit={(e) => void handleLinkLab(e)} className="grid grid-cols-12 gap-3 items-end">
+                <div className="col-span-6">
+                  <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Published Lab Template</label>
+                  <select
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-slate-800 dark:text-white"
+                    value={selectedLabTemplateId}
+                    onChange={(e) => setSelectedLabTemplateId(e.target.value)}
+                    required
+                  >
+                    <option value="">Select lab...</option>
+                    {publishedLabs.map((lab) => (
+                      <option key={lab.id} value={lab.id}>
+                        {lab.title} ({lab.difficulty})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Order</label>
+                  <input
+                    type="number"
+                    min={1}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-slate-800 dark:text-white"
+                    value={linkOrder}
+                    onChange={(e) => setLinkOrder(Number(e.target.value) || 1)}
+                  />
+                </div>
+                <label className="col-span-2 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={linkRequired}
+                    onChange={(e) => setLinkRequired(e.target.checked)}
+                  />
+                  Required
+                </label>
+                <button className="col-span-2 bg-idn-500 text-white rounded-lg py-2.5 font-semibold disabled:opacity-60" disabled={isSubmitting}>
+                  Link
+                </button>
+              </form>
+
+              <div className="space-y-2">
+                {linkedLabs.length === 0 ? (
+                  <div className="text-sm text-slate-500">No labs linked to this module yet.</div>
+                ) : (
+                  linkedLabs
+                    .slice()
+                    .sort((a, b) => a.order - b.order)
+                    .map((link) => (
+                      <div key={link.id} className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 flex items-center justify-between gap-3">
+                        <div>
+                          <div className="font-semibold text-slate-800 dark:text-white">{link.lab_template?.title ?? link.lab_template_id}</div>
+                          <div className="text-xs text-slate-500">
+                            {link.lab_template?.difficulty ?? '-'} • {link.lab_template?.est_minutes ?? 0}m • {link.required ? 'Required' : 'Optional'}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={1}
+                            className="w-20 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded p-1.5 text-sm"
+                            value={link.order}
+                            onChange={(e) => void handleUpdateLink(link, { order: Number(e.target.value) || 1 })}
+                          />
+                          <label className="text-xs flex items-center gap-1">
+                            <input
+                              type="checkbox"
+                              checked={link.required}
+                              onChange={(e) => void handleUpdateLink(link, { required: e.target.checked })}
+                            />
+                            Required
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => void handleUnlinkLab(link.id)}
+                            className="text-xs px-2 py-1 rounded bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-300"
+                          >
+                            Unlink
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                )}
               </div>
             </div>
           </div>

@@ -9,6 +9,23 @@ interface AdminLessonsListResponse {
   data: AdminLesson[];
 }
 
+export interface ModuleLabLinkItem {
+  id: string;
+  module_id: string;
+  lab_template_id: string;
+  order: number;
+  type: 'LAB' | 'CHALLENGE';
+  required: boolean;
+  lab_template: {
+    id: string;
+    title: string;
+    slug: string;
+    difficulty: string;
+    est_minutes: number;
+    status: string;
+  } | null;
+}
+
 export interface CreateAdminModulePayload {
   title: string;
   slug: string;
@@ -183,4 +200,20 @@ export const adminModulesApi = {
 
   removeAsset: (assetId: string): Promise<void> =>
     apiClient.delete<void>(`/api/v1/admin/assets/${assetId}`),
+
+  listModuleLabLinks: async (moduleId: string): Promise<ModuleLabLinkItem[]> => {
+    const response = await apiClient.get<{ data: ModuleLabLinkItem[] }>(`/api/v1/admin/modules/${moduleId}/lab-templates`);
+    return response.data;
+  },
+
+  linkModuleLab: async (
+    moduleId: string,
+    payload: { lab_template_id: string; order: number; required?: boolean; type?: 'LAB' | 'CHALLENGE' },
+  ): Promise<ModuleLabLinkItem> => {
+    const response = await apiClient.post<{ data: ModuleLabLinkItem }>(`/api/v1/admin/modules/${moduleId}/lab-templates`, payload);
+    return response.data;
+  },
+
+  unlinkModuleLab: (moduleId: string, linkId: string): Promise<void> =>
+    apiClient.delete<void>(`/api/v1/admin/modules/${moduleId}/lab-templates/${linkId}`),
 };

@@ -19,7 +19,21 @@ class AdminLabController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $query = \App\Models\LabTemplate::query()->latest('updated_at')->paginate((int) $request->integer('per_page', 20));
+        $status = strtoupper((string) $request->query('status', ''));
+        $search = trim((string) $request->query('search', ''));
+
+        $query = \App\Models\LabTemplate::query()
+            ->when($status !== '', fn ($q) => $q->where('status', $status))
+            ->when($search !== '', function ($q) use ($search): void {
+                $term = strtolower($search);
+                $q->where(function ($sub) use ($term): void {
+                    $sub->whereRaw('LOWER(title) LIKE ?', ["%{$term}%"])
+                        ->orWhereRaw('LOWER(slug) LIKE ?', ["%{$term}%"])
+                        ->orWhereRaw('LOWER(category) LIKE ?', ["%{$term}%"]);
+                });
+            })
+            ->latest('updated_at')
+            ->paginate((int) $request->integer('per_page', 20));
 
         return response()->json([
             'data' => LabTemplateResource::collection($query->items()),

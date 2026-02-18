@@ -205,7 +205,7 @@ const ModuleDetail: React.FC = () => {
       } else if (lab.instance_id && lab.status_for_user === 'RUNNING') {
         instance = await labService.getInstance(lab.instance_id);
       } else {
-        instance = await labService.activateLab(lab.lab_template_id);
+        instance = await labService.activateLab(lab.lab_template_id, moduleDetail?.id);
       }
 
       setInstanceModal(instance);
@@ -215,6 +215,27 @@ const ModuleDetail: React.FC = () => {
       setError(err instanceof Error ? err.message : 'Failed to start lab.');
     } finally {
       setStartingLabId(null);
+    }
+  };
+
+  const stopLab = async (instanceId: string) => {
+    try {
+      await labService.deactivateLab(instanceId);
+      await loadModule();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to stop lab.');
+    }
+  };
+
+  const openLab = async (instanceId: string) => {
+    try {
+      const instance = await labService.getInstance(instanceId);
+      const url = instance.connection_url || instance.access_urls?.[0]?.url;
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to open lab.');
     }
   };
 
@@ -443,18 +464,38 @@ const ModuleDetail: React.FC = () => {
                             {lab.type} • {lab.difficulty} • {lab.est_minutes}m • {lab.required ? 'Required' : 'Optional'}
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => void startOrResumeLab(lab)}
-                          disabled={startingLabId === lab.lab_template_id}
-                          className="px-3 py-1.5 rounded-md text-xs font-semibold bg-idn-500 text-white hover:bg-idn-600 disabled:opacity-60"
-                        >
-                          {startingLabId === lab.lab_template_id
-                            ? 'Starting...'
-                            : lab.status_for_user === 'RUNNING'
-                              ? 'Resume'
-                              : 'Start'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {lab.status_for_user === 'RUNNING' && lab.instance_id ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => void openLab(lab.instance_id!)}
+                                className="px-3 py-1.5 rounded-md text-xs font-semibold border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+                              >
+                                Open
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void stopLab(lab.instance_id!)}
+                                className="px-3 py-1.5 rounded-md text-xs font-semibold bg-red-500 text-white hover:bg-red-600"
+                              >
+                                Stop
+                              </button>
+                            </>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => void startOrResumeLab(lab)}
+                            disabled={startingLabId === lab.lab_template_id}
+                            className="px-3 py-1.5 rounded-md text-xs font-semibold bg-idn-500 text-white hover:bg-idn-600 disabled:opacity-60"
+                          >
+                            {startingLabId === lab.lab_template_id
+                              ? 'Starting...'
+                              : lab.status_for_user === 'RUNNING'
+                                ? 'Resume'
+                                : 'Start'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}

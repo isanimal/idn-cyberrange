@@ -27,12 +27,14 @@ class LabInstanceController extends Controller
         $validated = $request->validate([
             'lab_template_id' => ['required', 'string', 'exists:lab_templates,id'],
             'pin_version' => ['nullable', 'string', 'max:32'],
+            'module_id' => ['nullable', 'uuid', 'exists:modules,id'],
         ]);
 
         $instance = $this->instances->activate(
             $validated['lab_template_id'],
             $request->user(),
-            $validated['pin_version'] ?? null
+            $validated['pin_version'] ?? null,
+            $validated['module_id'] ?? null
         );
 
         return response()->json(['data' => new LabInstanceResource($instance->load('template'))], 201);
@@ -43,7 +45,8 @@ class LabInstanceController extends Controller
         $instance = $this->instances->activate(
             $id,
             $request->user(),
-            $request->validated('pin_version')
+            $request->validated('pin_version'),
+            $request->validated('module_id')
         );
 
         return response()->json(new LabInstanceResource($instance->load('template')), 201);

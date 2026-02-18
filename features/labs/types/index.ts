@@ -63,6 +63,7 @@ export interface LabTemplate {
 export interface LabInstance {
   instance_id: string;
   user_id: string;
+  module_id?: string | null;
   lab_template_id: string;
   template_version_pinned: string;
   state: InstanceState;

@@ -15,6 +15,7 @@ class ActivateLabRequest extends FormRequest
     {
         return [
             'pin_version' => ['nullable', 'string', 'max:32'],
+            'module_id' => ['nullable', 'uuid', 'exists:modules,id'],
         ];
     }
 }

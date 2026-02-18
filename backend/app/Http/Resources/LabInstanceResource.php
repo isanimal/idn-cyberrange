@@ -30,6 +30,7 @@ class LabInstanceResource extends JsonResource
         return [
             'instance_id' => $this->id,
             'user_id' => $this->user_id,
+            'module_id' => $this->module_id,
             'lab_template_id' => $this->lab_template_id,
             'template_version_pinned' => $this->template_version_pinned,
             'state' => $this->state?->value ?? $this->state,

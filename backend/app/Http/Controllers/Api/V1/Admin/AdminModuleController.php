@@ -554,6 +554,20 @@ class AdminModuleController extends Controller
         return response()->json(null, Response::HTTP_NO_CONTENT);
     }
 
+    public function destroyLabTemplateByTemplateId(Request $request, string $moduleId, string $labTemplateId): JsonResponse
+    {
+        $module = Module::query()->findOrFail($moduleId);
+        $link = $module->moduleLabTemplates()->where('lab_template_id', $labTemplateId)->firstOrFail();
+        $linkId = $link->id;
+        $link->delete();
+
+        $this->audit->log('MODULE_LAB_UNLINKED', (string) $request->user()?->id, 'module_lab_templates', $linkId, [
+            'message' => 'Unlinked lab template from module "'.$module->title.'"',
+        ]);
+
+        return response()->json(null, Response::HTTP_NO_CONTENT);
+    }
+
     private function doUpdateLesson(UpdateLessonRequest $request, Lesson $lesson, string $moduleTitle): JsonResponse
     {
         $validated = $request->validated();

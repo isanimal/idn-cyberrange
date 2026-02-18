@@ -112,21 +112,6 @@ class UserModuleController extends Controller
             ->get()
             ->keyBy('lesson_id');
 
-        $familyMap = $module->moduleLabTemplates
-            ->filter(fn ($link) => $link->labTemplate !== null)
-            ->mapWithKeys(fn ($link) => [$link->labTemplate->template_family_uuid => true])
-            ->keys()
-            ->values();
-
-        $instancesByFamily = LabInstance::query()
-            ->where('user_id', $user->id)
-            ->whereHas('template', fn ($q) => $q->whereIn('template_family_uuid', $familyMap))
-            ->with('template:id,template_family_uuid')
-            ->orderByDesc('last_activity_at')
-            ->get()
-            ->groupBy(fn (LabInstance $instance) => $instance->template?->template_family_uuid)
-            ->map(fn ($items) => $items->first());
-
         $payload = [
             'id' => $module->id,
             'slug' => $module->slug,
@@ -166,31 +151,34 @@ class UserModuleController extends Controller
                     'last_seen_at' => $progress?->last_seen_at?->toISOString(),
                 ];
             })->values(),
-            'labs' => $module->moduleLabTemplates->map(function ($link) use ($instancesByFamily): array {
-                $template = $link->labTemplate;
-                $instance = $template ? $instancesByFamily->get($template->template_family_uuid) : null;
-                $state = strtoupper((string) ($instance?->state?->value ?? $instance?->state ?? ''));
-
-                $statusForUser = match ($state) {
-                    'ACTIVE' => 'RUNNING',
-                    'INACTIVE', 'PAUSED', 'COMPLETED', 'ABANDONED' => 'STOPPED',
-                    default => 'NOT_STARTED',
-                };
-
-                return [
-                    'lab_template_id' => $template?->id,
-                    'title' => $template?->title,
-                    'difficulty' => strtoupper((string) ($template?->difficulty ?? '')),
-                    'est_minutes' => (int) ($template?->estimated_time_minutes ?? 0),
-                    'type' => strtoupper((string) ($link->type ?? 'LAB')),
-                    'required' => (bool) $link->required,
-                    'status_for_user' => $instance ? $statusForUser : 'NOT_STARTED',
-                    'instance_id' => $instance?->id,
-                ];
-            })->values(),
+            'labs' => $this->buildModuleLabsPayload($user->id, $module),
         ];
 
         return response()->json(array_merge($payload, ['data' => $payload]));
+    }
+
+    public function labs(Request $request, string $slug): JsonResponse
+    {
+        $user = $request->user();
+
+        $module = Module::query()
+            ->where('slug', $slug)
+            ->whereNull('archived_at')
+            ->where('status', 'active')
+            ->with(['moduleLabTemplates' => fn ($q) => $q->with('labTemplate')->orderBy('order')])
+            ->firstOrFail();
+
+        if ($this->isModuleLockedForUser($user->id, $module->id)) {
+            return response()->json(['message' => 'Module is locked'], Response::HTTP_FORBIDDEN);
+        }
+
+        return response()->json([
+            'data' => [
+                'module_id' => $module->id,
+                'module_slug' => $module->slug,
+                'labs' => $this->buildModuleLabsPayload($user->id, $module),
+            ],
+        ]);
     }
 
     public function start(Request $request, string $slug): JsonResponse
@@ -777,5 +765,46 @@ class UserModuleController extends Controller
             'SCROLL' => max($existingPercent, max(0, min(100, $percentViewed))),
             default => $existingPercent,
         };
+    }
+
+    private function buildModuleLabsPayload(string $userId, Module $module): Collection
+    {
+        $familyMap = $module->moduleLabTemplates
+            ->filter(fn ($link) => $link->labTemplate !== null)
+            ->mapWithKeys(fn ($link) => [$link->labTemplate->template_family_uuid => true])
+            ->keys()
+            ->values();
+
+        $instancesByFamily = LabInstance::query()
+            ->where('user_id', $userId)
+            ->whereHas('template', fn ($q) => $q->whereIn('template_family_uuid', $familyMap))
+            ->with('template:id,template_family_uuid')
+            ->orderByDesc('last_activity_at')
+            ->get()
+            ->groupBy(fn (LabInstance $instance) => $instance->template?->template_family_uuid)
+            ->map(fn ($items) => $items->first());
+
+        return $module->moduleLabTemplates->map(function ($link) use ($instancesByFamily): array {
+            $template = $link->labTemplate;
+            $instance = $template ? $instancesByFamily->get($template->template_family_uuid) : null;
+            $state = strtoupper((string) ($instance?->state?->value ?? $instance?->state ?? ''));
+
+            $statusForUser = match ($state) {
+                'ACTIVE' => 'RUNNING',
+                'INACTIVE', 'PAUSED', 'COMPLETED', 'ABANDONED' => 'STOPPED',
+                default => 'NOT_STARTED',
+            };
+
+            return [
+                'lab_template_id' => $template?->id,
+                'title' => $template?->title,
+                'difficulty' => strtoupper((string) ($template?->difficulty ?? '')),
+                'est_minutes' => (int) ($template?->estimated_time_minutes ?? 0),
+                'type' => strtoupper((string) ($link->type ?? 'LAB')),
+                'required' => (bool) $link->required,
+                'status_for_user' => $instance ? $statusForUser : 'NOT_STARTED',
+                'instance_id' => $instance?->id,
+            ];
+        })->values();
     }
 }

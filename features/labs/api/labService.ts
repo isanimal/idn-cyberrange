@@ -43,9 +43,10 @@ export const labService = {
   getLabDetail: async (id: string): Promise<LabDetailResponse> =>
     apiClient.get<LabDetailResponse>(`/api/v1/labs/${id}`),
 
-  activateLab: async (labTemplateId: string): Promise<LabInstance> => {
+  activateLab: async (labTemplateId: string, moduleId?: string): Promise<LabInstance> => {
     const response = await apiClient.post<LabInstance | { data: LabInstance }>('/api/v1/lab-instances', {
       lab_template_id: labTemplateId,
+      ...(moduleId ? { module_id: moduleId } : {}),
     });
 
     return unwrapInstance(response);

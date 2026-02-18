@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Lesson;
 use App\Models\LessonTask;
+use App\Models\LabTemplate;
 use App\Models\Module;
+use App\Models\ModuleLabTemplate;
 use App\Models\User;
 use App\Models\UserModuleProgress;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -273,5 +275,42 @@ class UserModuleApiTest extends TestCase
             ->getJson('/api/v1/modules/resume-module')
             ->assertOk()
             ->assertJsonPath('resume_lesson_id', $lesson->id);
+    }
+
+    public function test_user_can_list_module_labs_and_start_with_module_context(): void
+    {
+        $user = User::factory()->create();
+
+        $module = Module::query()->create([
+            'title' => 'Labs Module',
+            'slug' => 'labs-module',
+            'description' => 'd1',
+            'difficulty' => 'BASIC',
+            'level' => 'basic',
+            'status' => 'active',
+            'order_index' => 1,
+        ]);
+
+        $template = LabTemplate::factory()->published()->create();
+
+        ModuleLabTemplate::query()->create([
+            'module_id' => $module->id,
+            'lab_template_id' => $template->id,
+            'order' => 1,
+            'type' => 'LAB',
+            'required' => true,
+        ]);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/v1/modules/labs-module/labs')
+            ->assertOk()
+            ->assertJsonPath('data.labs.0.lab_template_id', $template->id);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/labs/'.$template->id.'/start', [
+                'module_id' => $module->id,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('module_id', $module->id);
     }
 }

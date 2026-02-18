@@ -4,6 +4,8 @@ namespace App\Services\Lab;
 
 use App\Enums\LabInstanceState;
 use App\Models\LabInstance;
+use App\Models\Module;
+use App\Models\ModuleLabTemplate;
 use App\Models\User;
 use App\Repositories\Contracts\LabInstanceRepositoryInterface;
 use App\Services\Audit\AuditLogService;
@@ -24,7 +26,7 @@ class LabInstanceService
     ) {
     }
 
-    public function activate(string $templateId, User $user, ?string $pinVersion = null): LabInstance
+    public function activate(string $templateId, User $user, ?string $pinVersion = null, ?string $moduleId = null): LabInstance
     {
         $template = $this->templates->findPublishedForUserCatalogOrFail($templateId);
 
@@ -36,11 +38,32 @@ class LabInstanceService
             $template = $pinned;
         }
 
+        if ($moduleId) {
+            $module = Module::query()
+                ->where('id', $moduleId)
+                ->where('status', 'active')
+                ->whereNull('archived_at')
+                ->first();
+            if (! $module) {
+                throw new HttpException(422, 'Module is not available for this lab.');
+            }
+
+            $isLinked = ModuleLabTemplate::query()
+                ->where('module_id', $moduleId)
+                ->whereHas('labTemplate', fn ($q) => $q->where('template_family_uuid', $template->template_family_uuid))
+                ->exists();
+
+            if (! $isLinked) {
+                throw new HttpException(422, 'Lab template is not linked to this module.');
+            }
+        }
+
         $instance = $this->instances->findByTemplateFamilyForUser($template->template_family_uuid, $user);
 
         if (! $instance) {
             $instance = $this->instances->create([
                 'user_id' => $user->id,
+                'module_id' => $moduleId,
                 'lab_template_id' => $template->id,
                 'template_version_pinned' => $template->version,
                 'state' => LabInstanceState::INACTIVE,
@@ -67,6 +90,7 @@ class LabInstanceService
         }
 
         $instance = $this->instances->update($instance, [
+            'module_id' => $moduleId ?? $instance->module_id,
             'lab_template_id' => $template->id,
             'template_version_pinned' => $template->version,
             'state' => LabInstanceState::ACTIVE,

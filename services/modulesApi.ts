@@ -12,6 +12,11 @@ export const modulesApi = {
     return response.data ?? response;
   },
 
+  getModuleLabs: async (slug: string): Promise<ModuleDetail['labs']> => {
+    const response = await apiClient.get<{ data: { labs: ModuleDetail['labs'] } }>(`/api/v1/modules/${slug}/labs`);
+    return response.data.labs;
+  },
+
   startModule: (slug: string): Promise<{ data: { module_id: string; progress_percent: number } }> =>
     apiClient.post<{ data: { module_id: string; progress_percent: number } }>(`/api/v1/modules/${slug}/start`),
 

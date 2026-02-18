@@ -16,6 +16,7 @@ class LabInstance extends Model
 
     protected $fillable = [
         'user_id',
+        'module_id',
         'lab_template_id',
         'template_version_pinned',
         'state',
@@ -53,6 +54,11 @@ class LabInstance extends Model
     public function template(): BelongsTo
     {
         return $this->belongsTo(LabTemplate::class, 'lab_template_id');
+    }
+
+    public function module(): BelongsTo
+    {
+        return $this->belongsTo(Module::class, 'module_id');
     }
 
     public function runtime(): HasOne

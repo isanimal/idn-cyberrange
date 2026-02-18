@@ -24,6 +24,7 @@ Route::prefix('v1')->group(function (): void {
         Route::middleware('user.active')->group(function (): void {
             Route::get('/modules', [UserModuleController::class, 'index']);
             Route::get('/modules/{slug}', [UserModuleController::class, 'show']);
+            Route::get('/modules/{slug}/labs', [UserModuleController::class, 'labs']);
             Route::get('/modules/{slug}/lessons/{lessonId}', [UserModuleController::class, 'lesson']);
             Route::post('/modules/{slug}/start', [UserModuleController::class, 'start']);
             Route::post('/modules/{slug}/lessons/{lessonId}/complete', [UserModuleController::class, 'completeLesson']);
@@ -34,6 +35,7 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/tasks/{taskId}/toggle', [UserModuleController::class, 'toggleTask']);
 
             Route::get('/labs', [LabController::class, 'index']);
+            Route::get('/labs/catalog', [LabController::class, 'index']);
             Route::get('/labs/instances/my', [LabInstanceController::class, 'myForLabsNamespace']);
             Route::get('/labs/instances/{instance_id}', [LabInstanceController::class, 'showForLabsNamespace']);
             Route::post('/labs/{id}/activate', [LabInstanceController::class, 'activate']);
@@ -60,12 +62,18 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/overview', [DashboardController::class, 'adminOverview']);
             Route::get('/dashboard/overview', [DashboardController::class, 'overview']);
             Route::get('/labs', [AdminLabController::class, 'index']);
+            Route::get('/labs/templates', [AdminLabController::class, 'index']);
             Route::post('/labs', [AdminLabController::class, 'store']);
+            Route::post('/labs/templates', [AdminLabController::class, 'store']);
             Route::get('/labs/{id}', [AdminLabController::class, 'show']);
+            Route::get('/labs/templates/{id}', [AdminLabController::class, 'show']);
             Route::patch('/labs/{id}', [AdminLabController::class, 'update']);
+            Route::put('/labs/templates/{id}', [AdminLabController::class, 'update']);
             Route::delete('/labs/{id}', [AdminLabController::class, 'destroy']);
             Route::post('/labs/{id}/publish', [AdminLabController::class, 'publish']);
+            Route::post('/labs/templates/{id}/publish', [AdminLabController::class, 'publish']);
             Route::post('/labs/{id}/archive', [AdminLabController::class, 'archive']);
+            Route::post('/labs/templates/{id}/archive', [AdminLabController::class, 'archive']);
 
             Route::get('/challenges', [AdminChallengeController::class, 'index']);
             Route::post('/challenges', [AdminChallengeController::class, 'store']);
@@ -100,6 +108,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/modules/{id}/lab-templates', [AdminModuleController::class, 'listLabTemplates']);
             Route::post('/modules/{id}/lab-templates', [AdminModuleController::class, 'storeLabTemplate']);
             Route::delete('/modules/{id}/lab-templates/{linkId}', [AdminModuleController::class, 'destroyLabTemplate']);
+            Route::post('/modules/{id}/labs/link', [AdminModuleController::class, 'storeLabTemplate']);
+            Route::delete('/modules/{id}/labs/{labTemplateId}/unlink', [AdminModuleController::class, 'destroyLabTemplateByTemplateId']);
             Route::patch('/lessons/{id}', [AdminModuleController::class, 'updateLessonById']);
             Route::delete('/lessons/{id}', [AdminModuleController::class, 'destroyLessonById']);
             Route::post('/modules/{id}/publish', [AdminModuleController::class, 'publish']);
