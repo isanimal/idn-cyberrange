@@ -13,6 +13,11 @@ class LabInstanceResource extends JsonResource
         $host = (string) config('labs.host');
         $assignedPort = $this->assigned_port ? (int) $this->assigned_port : null;
         $internalPort = $template?->internal_port ? (int) $template->internal_port : 80;
+        $runtime = $this->whenLoaded('runtime');
+        $runtimeAccessUrl = data_get($runtime, 'access_url');
+        $runtimePublicHost = data_get($runtime, 'public_host');
+        $runtimeHostPort = data_get($runtime, 'host_port');
+        $accessUrl = $this->connection_url ?: $runtimeAccessUrl;
 
         $runtimeMeta = is_array($this->runtime_metadata) ? $this->runtime_metadata : [];
         $gateway = data_get($runtimeMeta, 'gateway', $host);
@@ -20,7 +25,12 @@ class LabInstanceResource extends JsonResource
         $resolvedPorts = data_get($runtimeMeta, 'ports');
 
         $accessUrls = [];
-        if ($assignedPort) {
+        if ($accessUrl) {
+            $accessUrls[] = [
+                'label' => 'Public',
+                'url' => $accessUrl,
+            ];
+        } elseif ($assignedPort) {
             $accessUrls[] = [
                 'label' => 'HTTP',
                 'url' => sprintf('http://%s:%d', $host, $assignedPort),
@@ -43,7 +53,10 @@ class LabInstanceResource extends JsonResource
             'completed_at' => optional($this->completed_at)?->toIso8601String(),
             'expires_at' => optional($this->expires_at)?->toIso8601String(),
             'assigned_port' => $this->assigned_port,
-            'connection_url' => $this->connection_url,
+            'host_port' => $runtimeHostPort ?: $assignedPort,
+            'public_host' => $runtimePublicHost,
+            'access_url' => $accessUrl,
+            'connection_url' => $accessUrl,
             'runtime_metadata' => $this->runtime_metadata ?? (object) [],
             'last_error' => $this->last_error,
             'status' => $this->state?->value ?? $this->state,

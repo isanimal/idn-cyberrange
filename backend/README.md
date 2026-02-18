@@ -12,7 +12,7 @@ Laravel 11 backend scaffold for cyber range platform.
 
 ## Orchestration (How It Works)
 - User starts lab from API (`POST /api/v1/labs/{id_or_slug}/start` or `POST /api/v1/lab-instances`).
-- Backend allocates host port from configured range (`DOCKER_LAB_PORT_RANGE_START..END`).
+- Backend allocates host port from configured range (`PORT_RANGE_START..PORT_RANGE_END`, with fallback to `DOCKER_LAB_PORT_RANGE_START..END`).
 - Backend writes per-instance compose file into `DOCKER_LAB_RUNTIME_ROOT/<instance_id>/docker-compose.yml`.
 - Compose is started by backend only (browser never talks to Docker directly).
 - Runtime exports `PORT=<allocated_port>` before `docker compose up`, and validates port is numeric (`1..65535`).

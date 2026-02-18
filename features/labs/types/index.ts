@@ -76,6 +76,9 @@ export interface LabInstance {
   score?: number;
   expires_at?: string;
   assigned_port?: number; // NEW: The specific external port assigned to this user
+  host_port?: number;
+  public_host?: string | null;
+  access_url?: string | null;
   connection_url?: string;
   status?: string;
   ip_address?: string | null;
@@ -93,4 +96,26 @@ export interface LabInstance {
 
 export interface LabDetailResponse extends LabTemplate {
   user_instance: LabInstance | null;
+}
+
+export interface BlockingInstanceUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface BlockingInstance {
+  instance_id: string;
+  lab_template_id: string;
+  state: string;
+  user: BlockingInstanceUser;
+}
+
+export interface DeleteLabResponse {
+  ok: boolean;
+  error?: string;
+  details?: {
+    message?: string;
+    blocking_instances?: BlockingInstance[];
+  };
 }

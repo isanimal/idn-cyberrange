@@ -230,7 +230,7 @@ const ModuleDetail: React.FC = () => {
   const openLab = async (instanceId: string) => {
     try {
       const instance = await labService.getInstance(instanceId);
-      const url = instance.connection_url || instance.access_urls?.[0]?.url;
+      const url = instance.access_url || instance.connection_url || instance.access_urls?.[0]?.url;
       if (url) {
         window.open(url, '_blank', 'noopener,noreferrer');
       }
@@ -535,10 +535,10 @@ const ModuleDetail: React.FC = () => {
                   <div>Gateway: {instanceModal.gateway || 'n/a'}</div>
                   <div>IP Address: {instanceModal.ip_address || 'n/a'}</div>
                   <div>Port: {instanceModal.assigned_port || '-'}</div>
-                  <div className="break-all">URL: {instanceModal.connection_url || instanceModal.access_urls?.[0]?.url || '-'}</div>
-                  {(instanceModal.connection_url || instanceModal.access_urls?.[0]?.url) && (
+                  <div className="break-all">URL: {instanceModal.access_url || instanceModal.connection_url || instanceModal.access_urls?.[0]?.url || '-'}</div>
+                  {(instanceModal.access_url || instanceModal.connection_url || instanceModal.access_urls?.[0]?.url) && (
                     <a
-                      href={instanceModal.connection_url || instanceModal.access_urls?.[0]?.url}
+                      href={instanceModal.access_url || instanceModal.connection_url || instanceModal.access_urls?.[0]?.url}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-1 text-idn-600 dark:text-idn-400 font-semibold"

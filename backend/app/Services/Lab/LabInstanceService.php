@@ -14,6 +14,8 @@ use App\Services\Orchestration\LabOrchestratorService;
 use App\Services\Orchestration\OrchestrationPreflightService;
 use App\Services\Orchestration\PortAllocatorService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Cache;
 use Throwable;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -61,33 +63,38 @@ class LabInstanceService
             }
         }
 
-        $instance = $this->instances->findByTemplateFamilyForUser($template->template_family_uuid, $user);
-
-        if (! $instance) {
-            $instance = $this->instances->create([
-                'user_id' => $user->id,
-                'module_id' => $moduleId,
-                'lab_template_id' => $template->id,
-                'template_version_pinned' => $template->version,
-                'state' => LabInstanceState::INACTIVE,
-                'progress_percent' => 0,
-                'attempts_count' => 0,
-                'notes' => '',
-                'score' => 0,
-                'started_at' => now(),
-                'last_activity_at' => now(),
-            ]);
+        $startLock = Cache::lock(
+            sprintf('lab-start:%s:%s', $user->id, $template->template_family_uuid),
+            (int) config('labs.start_lock_seconds', 60)
+        );
+        if (! $startLock->get()) {
+            throw new HttpException(409, 'Lab start already in progress.');
         }
 
         try {
+            $instance = $this->resolveOrCreateInstance($template, $user, $moduleId);
+
+            if ($instance->state === LabInstanceState::ACTIVE) {
+                throw new HttpException(409, 'Lab instance is already running.');
+            }
+
             $port = $instance->assigned_port ?: $this->ports->allocate($instance->id);
             $instance = $this->orchestrator->startInstance($instance, $template, $port);
         } catch (Throwable $e) {
-            $this->instances->update($instance, [
-                'state' => LabInstanceState::ABANDONED,
-                'last_activity_at' => now(),
-                'last_error' => $e->getMessage(),
-            ]);
+            if ($e instanceof HttpException) {
+                throw $e;
+            }
+
+            if (isset($instance) && $instance instanceof LabInstance) {
+                $this->ports->releaseByInstance($instance->id);
+                $this->instances->update($instance, [
+                    'state' => LabInstanceState::ABANDONED,
+                    'last_activity_at' => now(),
+                    'last_error' => $e->getMessage(),
+                    'assigned_port' => null,
+                    'connection_url' => null,
+                ]);
+            }
 
             throw new OrchestrationOperationException(
                 'LAB_START_FAILED',
@@ -95,6 +102,8 @@ class LabInstanceService
                 $this->buildOperationDetails('start', $e),
                 503
             );
+        } finally {
+            $startLock->release();
         }
 
         $instance = $this->instances->update($instance, [
@@ -293,6 +302,46 @@ class LabInstanceService
 
         return (int) ($currentTemplate->configuration_base_port ?? $currentTemplate->internal_port) ===
             (int) ($targetTemplate->configuration_base_port ?? $targetTemplate->internal_port);
+    }
+
+    private function resolveOrCreateInstance($template, User $user, ?string $moduleId): LabInstance
+    {
+        $instance = $this->instances->findByTemplateFamilyForUser($template->template_family_uuid, $user);
+        if ($instance) {
+            return $instance;
+        }
+
+        try {
+            return $this->instances->create([
+                'user_id' => $user->id,
+                'module_id' => $moduleId,
+                'lab_template_id' => $template->id,
+                'template_version_pinned' => $template->version,
+                'state' => LabInstanceState::INACTIVE,
+                'progress_percent' => 0,
+                'attempts_count' => 0,
+                'notes' => '',
+                'score' => 0,
+                'started_at' => now(),
+                'last_activity_at' => now(),
+            ]);
+        } catch (QueryException $e) {
+            if (! $this->isDuplicateConstraintViolation($e)) {
+                throw $e;
+            }
+
+            $existing = $this->instances->findByTemplateFamilyForUser($template->template_family_uuid, $user);
+            if ($existing) {
+                return $existing;
+            }
+
+            throw $e;
+        }
+    }
+
+    private function isDuplicateConstraintViolation(QueryException $e): bool
+    {
+        return (string) $e->getCode() === '23000';
     }
 
     /**

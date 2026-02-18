@@ -18,12 +18,16 @@ class LabInstanceRuntime extends Model
         'compose_path',
         'network_name',
         'container_name',
+        'host_port',
+        'public_host',
+        'access_url',
         'runtime_meta',
     ];
 
     protected function casts(): array
     {
         return [
+            'host_port' => 'integer',
             'runtime_meta' => 'array',
         ];
     }

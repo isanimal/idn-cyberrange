@@ -129,10 +129,10 @@ const LabCatalog: React.FC = () => {
                   <div>Gateway: {instanceModal.gateway || 'n/a'}</div>
                   <div>IP Address: {instanceModal.ip_address || 'n/a'}</div>
                   <div>Port: {instanceModal.assigned_port || '-'}</div>
-                  <div className="break-all">URL: {instanceModal.connection_url || instanceModal.access_urls?.[0]?.url || '-'}</div>
-                  {(instanceModal.connection_url || instanceModal.access_urls?.[0]?.url) && (
+                  <div className="break-all">URL: {instanceModal.access_url || instanceModal.connection_url || instanceModal.access_urls?.[0]?.url || '-'}</div>
+                  {(instanceModal.access_url || instanceModal.connection_url || instanceModal.access_urls?.[0]?.url) && (
                     <a
-                      href={instanceModal.connection_url || instanceModal.access_urls?.[0]?.url}
+                      href={instanceModal.access_url || instanceModal.connection_url || instanceModal.access_urls?.[0]?.url}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-1 text-idn-600 dark:text-idn-400 font-semibold"

@@ -72,7 +72,7 @@ class AdminLabController extends Controller
         $lab = $this->templates->findOrFail($id);
         $this->templates->delete($lab, $request->user()->id);
 
-        return response()->json([], 204);
+        return response()->json(['ok' => true]);
     }
 
     public function publish(PublishLabTemplateRequest $request, string $id): JsonResponse

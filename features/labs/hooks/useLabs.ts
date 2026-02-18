@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { labService } from '../api/labService';
-import { LabTemplate, LabDetailResponse } from '../types';
+import { DeleteLabResponse, LabTemplate, LabDetailResponse } from '../types';
 
 // Simplified hook implementation (replacing React Query for this specific demo environment if libraries aren't fully set up, 
 // but sticking to the request of using React Query-like structure).
@@ -156,11 +156,12 @@ export const useAdminLabMutations = (onSuccess: () => void) => {
     }
   };
   
-  const deleteLab = async (id: string) => {
+  const deleteLab = async (id: string): Promise<DeleteLabResponse> => {
     setIsSubmitting(true);
     try {
-      await labService.deleteLab(id);
+      const deleted = await labService.deleteLab(id);
       onSuccess();
+      return deleted;
     } finally {
       setIsSubmitting(false);
     }

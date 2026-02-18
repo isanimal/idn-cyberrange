@@ -33,3 +33,11 @@ docker compose exec app php artisan migrate --seed
 - Protect `/admin/*` with strict role + network policy.
 - Ensure `DOCKER_LAB_RUNTIME_ROOT` is writable by app user.
 - Put Nginx reverse proxy + TLS in front.
+- Set public lab URL env:
+  - `CYBERRANGE_PUBLIC_PORT_MODE=direct` with `CYBERRANGE_PUBLIC_HOST=<public-ip-or-dns>`
+  - or `CYBERRANGE_PUBLIC_PORT_MODE=proxy` with `CYBERRANGE_PUBLIC_BASE_URL=https://labs.example.com`
+- Allow inbound lab ports on firewall/security group for direct mode:
+```bash
+sudo ufw allow 20000:40000/tcp
+```
+- If behind cloud LB/security group, also allow the same TCP range or use proxy mode to expose only 80/443.

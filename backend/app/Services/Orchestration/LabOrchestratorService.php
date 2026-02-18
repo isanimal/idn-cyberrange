@@ -9,21 +9,25 @@ use Illuminate\Support\Facades\DB;
 
 class LabOrchestratorService
 {
-    public function __construct(private readonly LabDriverInterface $driver)
+    public function __construct(
+        private readonly LabDriverInterface $driver,
+        private readonly PublicLabAccessService $publicAccess,
+    )
     {
     }
 
     public function startInstance(LabInstance $instance, LabTemplate $template, int $assignedPort): LabInstance
     {
         $metadata = $this->driver->startInstance($instance, $template, $assignedPort);
+        $publicAccess = $this->publicAccess->resolve($instance, $assignedPort);
 
         $instance->fill([
             'runtime_metadata' => $metadata,
             'assigned_port' => $assignedPort,
-            'connection_url' => sprintf('http://%s:%d', config('labs.host'), $assignedPort),
+            'connection_url' => $publicAccess['access_url'],
         ])->save();
 
-        $this->syncRuntime($instance, $metadata);
+        $this->syncRuntime($instance, $metadata, $publicAccess);
 
         return $instance->refresh();
     }
@@ -37,6 +41,16 @@ class LabOrchestratorService
             'connection_url' => null,
             'assigned_port' => null,
         ])->save();
+
+        $instance->runtime()?->update([
+            'host_port' => null,
+            'public_host' => null,
+            'access_url' => null,
+            'runtime_meta' => array_merge(
+                is_array($instance->runtime?->runtime_meta) ? $instance->runtime->runtime_meta : [],
+                ['stop' => $metadata]
+            ),
+        ]);
 
         return $instance->refresh();
     }
@@ -66,19 +80,20 @@ class LabOrchestratorService
     public function upgradeInstance(LabInstance $instance, LabTemplate $targetTemplate, string $strategy, int $assignedPort): LabInstance
     {
         $metadata = $this->driver->upgradeInstance($instance, $targetTemplate, $strategy, $assignedPort);
+        $publicAccess = $this->publicAccess->resolve($instance, $assignedPort);
 
         $instance->fill([
             'runtime_metadata' => array_merge($instance->runtime_metadata ?? [], ['upgrade' => $metadata]),
             'assigned_port' => $assignedPort,
-            'connection_url' => sprintf('http://%s:%d', config('labs.host'), $assignedPort),
+            'connection_url' => $publicAccess['access_url'],
         ])->save();
 
-        $this->syncRuntime($instance, $metadata);
+        $this->syncRuntime($instance, $metadata, $publicAccess);
 
         return $instance->refresh();
     }
 
-    private function syncRuntime(LabInstance $instance, array $metadata): void
+    private function syncRuntime(LabInstance $instance, array $metadata, array $publicAccess): void
     {
         LabInstanceRuntime::query()->updateOrCreate(
             ['lab_instance_id' => $instance->id],
@@ -87,6 +102,9 @@ class LabOrchestratorService
                 'compose_path' => $metadata['compose_path'] ?? null,
                 'network_name' => $metadata['network_name'] ?? null,
                 'container_name' => $metadata['container_name'] ?? null,
+                'host_port' => $publicAccess['host_port'] ?? null,
+                'public_host' => $publicAccess['public_host'] ?? null,
+                'access_url' => $publicAccess['access_url'] ?? null,
                 'runtime_meta' => $metadata,
             ]
         );

@@ -7,11 +7,14 @@ use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateUserRequest;
 use App\Models\LabInstance;
+use App\Models\Module;
 use App\Models\User;
+use App\Models\UserModule;
 use App\Services\Audit\AuditLogService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class AdminUserController extends Controller
@@ -169,4 +172,122 @@ class AdminUserController extends Controller
         return response()->json($user->fresh());
     }
 
+    public function modules(string $id): JsonResponse
+    {
+        $user = User::query()->findOrFail($id);
+
+        $assignedRows = UserModule::query()
+            ->where('user_id', $user->id)
+            ->with('module')
+            ->orderByDesc('assigned_at')
+            ->get();
+
+        $assigned = $assignedRows
+            ->filter(fn (UserModule $row) => $row->module !== null)
+            ->map(function (UserModule $row): array {
+                return [
+                    'assignment_id' => $row->id,
+                    'module_id' => $row->module_id,
+                    'status' => strtoupper((string) $row->status),
+                    'assigned_at' => $row->assigned_at?->toISOString(),
+                    'due_at' => $row->due_at?->toISOString(),
+                    'module' => [
+                        'id' => $row->module->id,
+                        'slug' => $row->module->slug,
+                        'title' => $row->module->title,
+                        'description' => $row->module->description,
+                        'difficulty' => strtoupper((string) ($row->module->difficulty ?: $row->module->level ?: 'BASIC')),
+                    ],
+                ];
+            })
+            ->values();
+
+        $assignedIds = $assignedRows->pluck('module_id')->all();
+
+        $available = Module::query()
+            ->whereNull('archived_at')
+            ->where('status', 'active')
+            ->whereNotIn('id', $assignedIds)
+            ->orderBy('order_index')
+            ->get()
+            ->map(fn (Module $module): array => [
+                'id' => $module->id,
+                'slug' => $module->slug,
+                'title' => $module->title,
+                'description' => $module->description,
+                'difficulty' => strtoupper((string) ($module->difficulty ?: $module->level ?: 'BASIC')),
+            ])
+            ->values();
+
+        return response()->json([
+            'data' => [
+                'assigned' => $assigned,
+                'available' => $available,
+            ],
+        ]);
+    }
+
+    public function assignModules(Request $request, string $id): JsonResponse
+    {
+        $user = User::query()->findOrFail($id);
+
+        $validated = $request->validate([
+            'module_ids' => ['required', 'array', 'min:1'],
+            'module_ids.*' => ['uuid', 'exists:modules,id'],
+            'status' => ['nullable', Rule::in([
+                UserModule::STATUS_ASSIGNED,
+                UserModule::STATUS_ACTIVE,
+                UserModule::STATUS_LOCKED,
+            ])],
+            'due_at' => ['nullable', 'date'],
+        ]);
+
+        $status = strtoupper((string) ($validated['status'] ?? UserModule::STATUS_ASSIGNED));
+        $dueAt = $validated['due_at'] ?? null;
+        $moduleIds = collect($validated['module_ids'])->unique()->values()->all();
+
+        DB::transaction(function () use ($user, $moduleIds, $status, $dueAt): void {
+            $allowedModuleIds = Module::query()
+                ->whereNull('archived_at')
+                ->where('status', 'active')
+                ->whereIn('id', $moduleIds)
+                ->pluck('id')
+                ->all();
+
+            foreach ($allowedModuleIds as $moduleId) {
+                UserModule::query()->updateOrCreate(
+                    ['user_id' => $user->id, 'module_id' => $moduleId],
+                    [
+                        'status' => $status,
+                        'assigned_at' => now(),
+                        'due_at' => $dueAt,
+                    ]
+                );
+            }
+        });
+
+        $this->audit->log('ADMIN_USER_MODULES_ASSIGNED', auth()->id(), 'User', $user->id, [
+            'module_ids' => $moduleIds,
+            'status' => $status,
+            'due_at' => $dueAt,
+        ]);
+
+        return $this->modules($id);
+    }
+
+    public function unassignModule(string $id, string $moduleId): JsonResponse
+    {
+        $user = User::query()->findOrFail($id);
+
+        UserModule::query()
+            ->where('user_id', $user->id)
+            ->where('module_id', $moduleId)
+            ->delete();
+
+        $this->audit->log('ADMIN_USER_MODULE_UNASSIGNED', auth()->id(), 'User', $user->id, [
+            'module_id' => $moduleId,
+        ]);
+
+        return response()->json(['ok' => true]);
+    }
 }

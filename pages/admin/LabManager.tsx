@@ -4,7 +4,7 @@ import { useAdminLabs, useAdminLabMutations } from '../../features/labs/hooks/us
 import { LabTemplate, LabDifficulty, LabStatus } from '../../features/labs/types';
 import { 
   Plus, Archive, FileText, Upload, Trash2, Edit2, 
-  X, Check, AlertTriangle, Search, Filter, Server, Code
+  X, AlertTriangle, Search, Server, Code
 } from 'lucide-react';
 
 const PORT_PLACEHOLDER = '${PORT}';
@@ -18,7 +18,11 @@ const LabManager: React.FC = () => {
   // Modal States
   const [editorOpen, setEditorOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [editingLab, setEditingLab] = useState<LabTemplate | null>(null);
+  const [deletingLab, setDeletingLab] = useState<LabTemplate | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Form States
   const [activeTab, setActiveTab] = useState<'info' | 'config'>('info');
@@ -132,10 +136,32 @@ const LabManager: React.FC = () => {
       await archiveLab(id);
     }
   };
-  
-  const handleDelete = async (id: string) => {
-    if (confirm('DANGER: This will permanently delete the lab template. Continue?')) {
-      await deleteLab(id);
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    window.setTimeout(() => setToast(null), 3500);
+  };
+
+  const openDeleteModal = (lab: LabTemplate) => {
+    setDeletingLab(lab);
+    setDeleteError(null);
+    setDeleteOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingLab || isSubmitting) {
+      return;
+    }
+
+    try {
+      await deleteLab(deletingLab.id);
+      setDeleteOpen(false);
+      setDeletingLab(null);
+      showToast('success', `Lab "${deletingLab.title}" deleted successfully.`);
+    } catch (err) {
+      const fallback = err instanceof Error ? err.message : 'Failed to delete lab template.';
+      setDeleteError(fallback);
+      showToast('error', fallback);
     }
   };
 
@@ -158,6 +184,16 @@ const LabManager: React.FC = () => {
           <Plus size={18} /> Create New Draft
         </button>
       </div>
+
+      {toast && (
+        <div className={`rounded-lg px-4 py-3 text-sm border ${
+          toast.type === 'success'
+            ? 'bg-green-50 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800'
+            : 'bg-red-50 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800'
+        }`}>
+          {toast.message}
+        </div>
+      )}
 
       <Card className="p-0 overflow-hidden">
         {/* Toolbar */}
@@ -240,22 +276,23 @@ const LabManager: React.FC = () => {
                           </button>
                         )}
 
-                        {lab.status !== LabStatus.ARCHIVED ? (
-                           <button 
-                             onClick={() => handleArchive(lab.id)}
-                             className="p-2 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded text-slate-500 hover:text-yellow-600 transition-colors" 
-                             title="Archive"
-                           >
-                             <Archive size={16} />
-                           </button>
-                        ) : (
-                           <button 
-                             onClick={() => handleDelete(lab.id)}
-                             className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded text-slate-500 hover:text-red-600 transition-colors" 
-                             title="Delete Permanently"
-                           >
-                             <Trash2 size={16} />
-                           </button>
+                        <button 
+                          onClick={() => openDeleteModal(lab)}
+                          disabled={isSubmitting}
+                          className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded text-slate-500 hover:text-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
+                          title="Delete"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+
+                        {lab.status !== LabStatus.ARCHIVED && (
+                          <button 
+                            onClick={() => handleArchive(lab.id)}
+                            className="p-2 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded text-slate-500 hover:text-yellow-600 transition-colors" 
+                            title="Archive"
+                          >
+                            <Archive size={16} />
+                          </button>
                         )}
                       </div>
                     </td>
@@ -266,6 +303,59 @@ const LabManager: React.FC = () => {
           </table>
         </div>
       </Card>
+
+      {/* Delete Modal */}
+      {deleteOpen && deletingLab && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl w-full max-w-xl shadow-2xl">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-700">
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                <AlertTriangle className="text-red-600" size={20} />
+                Delete Lab Template
+              </h3>
+              <p className="text-sm text-slate-500 mt-2">
+                You are deleting <span className="font-semibold text-slate-700 dark:text-slate-200">{deletingLab.title}</span> version{' '}
+                <span className="font-mono">{deletingLab.version}</span>.
+              </p>
+              <p className="text-sm text-red-600 dark:text-red-400 mt-2">
+                Delete this template? Existing lab instances will remain but template won&apos;t appear in catalog.
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {deleteError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                  {deleteError}
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 flex justify-end gap-3 rounded-b-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isSubmitting) return;
+                  setDeleteOpen(false);
+                  setDeletingLab(null);
+                  setDeleteError(null);
+                }}
+                className="px-4 py-2 rounded text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors"
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteConfirm}
+                disabled={isSubmitting}
+                className="bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold px-4 py-2 rounded-lg shadow-lg shadow-red-600/20"
+              >
+                {isSubmitting ? 'Deleting...' : 'Delete Template'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Editor Modal */}
       {editorOpen && (

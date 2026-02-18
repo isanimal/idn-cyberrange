@@ -7,7 +7,9 @@ use App\Enums\UserRole;
 use App\Enums\UserStatus;
 use App\Models\Challenge;
 use App\Models\LabTemplate;
+use App\Models\Module;
 use App\Models\User;
+use App\Models\UserModule;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -18,6 +20,16 @@ class DatabaseSeeder extends Seeder
             ['email' => 'admin@cyberrange.local'],
             [
                 'name' => 'Admin',
+                'password' => 'password123',
+                'role' => UserRole::ADMIN,
+                'status' => UserStatus::ACTIVE,
+            ]
+        );
+
+        $exampleAdmin = User::query()->updateOrCreate(
+            ['email' => 'admin@example.com'],
+            [
+                'name' => 'Admin Example',
                 'password' => 'password123',
                 'role' => UserRole::ADMIN,
                 'status' => UserStatus::ACTIVE,
@@ -130,5 +142,21 @@ class DatabaseSeeder extends Seeder
         }
 
         $this->call(ModuleSeeder::class);
+
+        $firstModuleId = Module::query()
+            ->whereNull('archived_at')
+            ->where('status', 'active')
+            ->orderBy('order_index')
+            ->value('id');
+
+        if ($firstModuleId) {
+            UserModule::query()->updateOrCreate(
+                ['user_id' => $exampleAdmin->id, 'module_id' => $firstModuleId],
+                [
+                    'status' => UserModule::STATUS_ASSIGNED,
+                    'assigned_at' => now(),
+                ]
+            );
+        }
     }
 }

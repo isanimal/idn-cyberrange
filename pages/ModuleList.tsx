@@ -96,7 +96,7 @@ const ModuleList: React.FC = () => {
           </div>
         ) : filteredModules.length === 0 ? (
           <Card className="col-span-full">
-            <div className="text-slate-500 dark:text-slate-400 text-sm">No modules published.</div>
+            <div className="text-slate-500 dark:text-slate-400 text-sm">No assigned modules yet.</div>
           </Card>
         ) : filteredModules.map((module) => (
           <div key={module.id} className={`relative ${module.is_locked ? 'opacity-70 grayscale' : ''}`}>

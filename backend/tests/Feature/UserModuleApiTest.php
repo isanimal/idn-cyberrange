@@ -8,6 +8,7 @@ use App\Models\LabTemplate;
 use App\Models\Module;
 use App\Models\ModuleLabTemplate;
 use App\Models\User;
+use App\Models\UserModule;
 use App\Models\UserModuleProgress;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -39,6 +40,8 @@ class UserModuleApiTest extends TestCase
             'status' => 'active',
             'order_index' => 2,
         ]);
+        $this->assignModule($user, $m1);
+        $this->assignModule($user, $m2);
 
         Lesson::query()->create([
             'module_id' => $m1->id,
@@ -69,15 +72,64 @@ class UserModuleApiTest extends TestCase
             ->assertJsonPath('data.1.slug', 'm2')
             ->assertJsonPath('data.1.is_locked', false);
 
-        UserModuleProgress::query()
+        UserModule::query()
             ->where('user_id', $user->id)
-            ->where('module_id', $m1->id)
-            ->update(['progress_percent' => 40, 'completed_at' => null]);
+            ->where('module_id', $m2->id)
+            ->update(['status' => UserModule::STATUS_LOCKED]);
 
         $this->actingAs($user, 'sanctum')
             ->getJson('/api/v1/modules')
             ->assertOk()
             ->assertJsonPath('data.1.slug', 'm2')
+            ->assertJsonPath('data.1.is_locked', true);
+    }
+
+    public function test_user_only_sees_assigned_modules_and_locked_assignment_is_flagged(): void
+    {
+        $user = User::factory()->create();
+
+        $assigned = Module::query()->create([
+            'title' => 'Assigned',
+            'slug' => 'assigned-module',
+            'description' => 'd1',
+            'difficulty' => 'BASIC',
+            'level' => 'basic',
+            'status' => 'active',
+            'order_index' => 1,
+        ]);
+
+        $locked = Module::query()->create([
+            'title' => 'Locked',
+            'slug' => 'locked-module',
+            'description' => 'd2',
+            'difficulty' => 'BASIC',
+            'level' => 'basic',
+            'status' => 'active',
+            'order_index' => 2,
+        ]);
+
+        Module::query()->create([
+            'title' => 'Hidden',
+            'slug' => 'hidden-module',
+            'description' => 'd3',
+            'difficulty' => 'BASIC',
+            'level' => 'basic',
+            'status' => 'active',
+            'order_index' => 3,
+        ]);
+
+        $this->assignModule($user, $assigned, UserModule::STATUS_ASSIGNED);
+        $this->assignModule($user, $locked, UserModule::STATUS_LOCKED);
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->getJson('/api/v1/modules')
+            ->assertOk();
+
+        $slugs = collect($response->json('data'))->pluck('slug')->all();
+        $this->assertEqualsCanonicalizing(['assigned-module', 'locked-module'], $slugs);
+
+        $response
+            ->assertJsonPath('data.1.slug', 'locked-module')
             ->assertJsonPath('data.1.is_locked', true);
     }
 
@@ -94,6 +146,7 @@ class UserModuleApiTest extends TestCase
             'status' => 'active',
             'order_index' => 1,
         ]);
+        $this->assignModule($user, $module);
 
         $lesson1 = Lesson::query()->create([
             'module_id' => $module->id,
@@ -152,6 +205,7 @@ class UserModuleApiTest extends TestCase
             'status' => 'active',
             'order_index' => 1,
         ]);
+        $this->assignModule($user, $module);
 
         $lesson1 = Lesson::query()->create([
             'module_id' => $module->id,
@@ -208,6 +262,7 @@ class UserModuleApiTest extends TestCase
             'status' => 'active',
             'order_index' => 1,
         ]);
+        $this->assignModule($user, $module);
 
         $lesson = Lesson::query()->create([
             'module_id' => $module->id,
@@ -255,6 +310,7 @@ class UserModuleApiTest extends TestCase
             'status' => 'active',
             'order_index' => 1,
         ]);
+        $this->assignModule($user, $module);
 
         $lesson = Lesson::query()->create([
             'module_id' => $module->id,
@@ -290,6 +346,7 @@ class UserModuleApiTest extends TestCase
             'status' => 'active',
             'order_index' => 1,
         ]);
+        $this->assignModule($user, $module);
 
         $template = LabTemplate::factory()->published()->create();
 
@@ -312,5 +369,15 @@ class UserModuleApiTest extends TestCase
             ])
             ->assertCreated()
             ->assertJsonPath('module_id', $module->id);
+    }
+
+    private function assignModule(User $user, Module $module, string $status = UserModule::STATUS_ASSIGNED): void
+    {
+        UserModule::query()->create([
+            'user_id' => $user->id,
+            'module_id' => $module->id,
+            'status' => $status,
+            'assigned_at' => now(),
+        ]);
     }
 }

@@ -7,7 +7,9 @@ use App\Models\LabInstance;
 use App\Models\Lesson;
 use App\Models\LessonTask;
 use App\Models\Module;
+use App\Models\User;
 use App\Models\UserLessonProgress;
+use App\Models\UserModule;
 use App\Models\UserModuleProgress;
 use App\Models\UserTaskProgress;
 use Illuminate\Http\JsonResponse;
@@ -22,13 +24,25 @@ class UserModuleController extends Controller
     {
         $user = $request->user();
 
-        $modules = Module::query()
+        $baseQuery = Module::query()
             ->whereNull('archived_at')
             ->where('status', 'active')
             ->withCount('lessons')
             ->with(['lessons' => fn ($q) => $q->where('is_active', true)->orderBy('order')])
-            ->orderBy('order_index')
-            ->get();
+            ->orderBy('order_index');
+
+        $assignmentMap = collect();
+        if (! $user->isAdmin()) {
+            $assignments = UserModule::query()
+                ->where('user_id', $user->id)
+                ->whereIn('status', [UserModule::STATUS_ASSIGNED, UserModule::STATUS_ACTIVE, UserModule::STATUS_LOCKED])
+                ->get()
+                ->keyBy('module_id');
+            $assignmentMap = $assignments;
+            $baseQuery->whereIn('id', $assignments->keys()->all());
+        }
+
+        $modules = $baseQuery->get();
 
         $progressRows = UserModuleProgress::query()
             ->where('user_id', $user->id)
@@ -36,10 +50,10 @@ class UserModuleController extends Controller
             ->get()
             ->keyBy('module_id');
 
-        $lockedMap = $this->buildLockedMap($modules, $progressRows);
-
-        $data = $modules->map(function (Module $module) use ($progressRows, $lockedMap): array {
+        $data = $modules->map(function (Module $module) use ($progressRows, $assignmentMap, $user): array {
             $progress = $progressRows->get($module->id);
+            $assignmentStatus = strtoupper((string) ($assignmentMap->get($module->id)?->status ?? UserModule::STATUS_ASSIGNED));
+            $isLocked = ! $user->isAdmin() && $assignmentStatus === UserModule::STATUS_LOCKED;
 
             return [
                 'id' => $module->id,
@@ -57,8 +71,9 @@ class UserModuleController extends Controller
                 'order_index' => (int) $module->order_index,
                 'lessons_count' => (int) $module->lessons_count,
                 'progress_percent' => (int) ($progress->progress_percent ?? 0),
-                'is_locked' => (bool) ($lockedMap[$module->id] ?? false),
-                'locked_reason' => (bool) ($lockedMap[$module->id] ?? false) ? 'Complete the previous module to unlock this one.' : null,
+                'is_locked' => $isLocked,
+                'assignment_status' => $user->isAdmin() ? 'ASSIGNED' : $assignmentStatus,
+                'locked_reason' => $isLocked ? 'This module is currently locked by your admin.' : null,
                 'completed_at' => $progress?->completed_at?->toISOString(),
             ];
         })->values();
@@ -81,20 +96,11 @@ class UserModuleController extends Controller
             ->withCount('lessons')
             ->firstOrFail();
 
-        $orderedModules = Module::query()
-            ->whereNull('archived_at')
-            ->where('status', 'active')
-            ->orderBy('order_index')
-            ->get(['id', 'order_index']);
-
-        $progressRows = UserModuleProgress::query()
-            ->where('user_id', $user->id)
-            ->whereIn('module_id', $orderedModules->pluck('id'))
-            ->get()
-            ->keyBy('module_id');
-
-        $lockedMap = $this->buildLockedMap($orderedModules, $progressRows);
-        if ($lockedMap[$module->id] ?? false) {
+        $assignment = $this->resolveUserModuleAssignment($user, $module->id);
+        if (! $user->isAdmin() && ! $assignment) {
+            return response()->json(['message' => 'Module is not assigned'], Response::HTTP_FORBIDDEN);
+        }
+        if (! $user->isAdmin() && strtoupper((string) $assignment->status) === UserModule::STATUS_LOCKED) {
             return response()->json(['message' => 'Module is locked'], Response::HTTP_FORBIDDEN);
         }
 
@@ -128,6 +134,7 @@ class UserModuleController extends Controller
             'order_index' => (int) $module->order_index,
             'progress_percent' => (int) ($moduleProgress->progress_percent ?? 0),
             'is_locked' => false,
+            'assignment_status' => $user->isAdmin() ? UserModule::STATUS_ASSIGNED : strtoupper((string) ($assignment?->status ?? UserModule::STATUS_ASSIGNED)),
             'resume_lesson_id' => $moduleProgress->last_lesson_id,
             'lessons' => $module->lessons->map(function (Lesson $lesson) use ($lessonProgressMap): array {
                 $progress = $lessonProgressMap->get($lesson->id);
@@ -168,7 +175,7 @@ class UserModuleController extends Controller
             ->with(['moduleLabTemplates' => fn ($q) => $q->with('labTemplate')->orderBy('order')])
             ->firstOrFail();
 
-        if ($this->isModuleLockedForUser($user->id, $module->id)) {
+        if ($this->isModuleLockedForUser($user, $module->id)) {
             return response()->json(['message' => 'Module is locked'], Response::HTTP_FORBIDDEN);
         }
 
@@ -191,7 +198,7 @@ class UserModuleController extends Controller
             ->where('status', 'active')
             ->firstOrFail();
 
-        $isLocked = $this->isModuleLockedForUser($user->id, $module->id);
+        $isLocked = $this->isModuleLockedForUser($user, $module->id);
         if ($isLocked) {
             return response()->json(['message' => 'Module is locked'], Response::HTTP_FORBIDDEN);
         }
@@ -217,7 +224,7 @@ class UserModuleController extends Controller
     public function completeLesson(Request $request, string $slug, string $lessonId): JsonResponse
     {
         $user = $request->user();
-        $lesson = $this->getLessonOrFailForUser($user->id, $slug, $lessonId);
+        $lesson = $this->getLessonOrFailForUser($user, $slug, $lessonId);
 
         UserLessonProgress::query()->updateOrCreate(
             ['user_id' => $user->id, 'lesson_id' => $lesson->id],
@@ -247,7 +254,7 @@ class UserModuleController extends Controller
     public function lesson(Request $request, string $slug, string $lessonId): JsonResponse
     {
         $user = $request->user();
-        $lesson = $this->getLessonOrFailForUser($user->id, $slug, $lessonId);
+        $lesson = $this->getLessonOrFailForUser($user, $slug, $lessonId);
 
         return response()->json([
             'data' => $this->buildLessonPayload($user->id, $lesson, true),
@@ -273,7 +280,7 @@ class UserModuleController extends Controller
             return response()->json(['message' => 'Module is not available'], Response::HTTP_FORBIDDEN);
         }
 
-        if ($this->isModuleLockedForUser($user->id, $module->id)) {
+        if ($this->isModuleLockedForUser($user, $module->id)) {
             return response()->json(['message' => 'Module is locked'], Response::HTTP_FORBIDDEN);
         }
 
@@ -301,7 +308,7 @@ class UserModuleController extends Controller
             return response()->json(['message' => 'Module is not available'], Response::HTTP_FORBIDDEN);
         }
 
-        if ($this->isModuleLockedForUser($user->id, $module->id)) {
+        if ($this->isModuleLockedForUser($user, $module->id)) {
             return response()->json(['message' => 'Module is locked'], Response::HTTP_FORBIDDEN);
         }
 
@@ -383,7 +390,7 @@ class UserModuleController extends Controller
             return response()->json(['message' => 'Module is not available'], Response::HTTP_FORBIDDEN);
         }
 
-        if ($this->isModuleLockedForUser($user->id, $module->id)) {
+        if ($this->isModuleLockedForUser($user, $module->id)) {
             return response()->json(['message' => 'Module is locked'], Response::HTTP_FORBIDDEN);
         }
 
@@ -455,7 +462,7 @@ class UserModuleController extends Controller
             return response()->json(['message' => 'Lesson is not available'], Response::HTTP_FORBIDDEN);
         }
 
-        if ($this->isModuleLockedForUser($user->id, $module->id)) {
+        if ($this->isModuleLockedForUser($user, $module->id)) {
             return response()->json(['message' => 'Module is locked'], Response::HTTP_FORBIDDEN);
         }
 
@@ -563,39 +570,30 @@ class UserModuleController extends Controller
         return $progress;
     }
 
-    private function isModuleLockedForUser(string $userId, string $moduleId): bool
+    private function isModuleLockedForUser(User $user, string $moduleId): bool
     {
-        $modules = Module::query()
-            ->whereNull('archived_at')
-            ->where('status', 'active')
-            ->orderBy('order_index')
-            ->get(['id', 'order_index']);
-
-        $progressRows = UserModuleProgress::query()
-            ->where('user_id', $userId)
-            ->whereIn('module_id', $modules->pluck('id'))
-            ->get()
-            ->keyBy('module_id');
-
-        $lockedMap = $this->buildLockedMap($modules, $progressRows);
-
-        return (bool) ($lockedMap[$moduleId] ?? false);
-    }
-
-    private function buildLockedMap($modules, $progressRows): array
-    {
-        $previousCompleted = true;
-        $lockedMap = [];
-
-        foreach ($modules as $module) {
-            $progress = $progressRows->get($module->id);
-            $isCompleted = ($progress?->completed_at !== null) || ((int) ($progress?->progress_percent ?? 0) >= 100);
-
-            $lockedMap[$module->id] = ! $previousCompleted;
-            $previousCompleted = $isCompleted;
+        if ($user->isAdmin()) {
+            return false;
         }
 
-        return $lockedMap;
+        $assignment = $this->resolveUserModuleAssignment($user, $moduleId);
+        if (! $assignment) {
+            return true;
+        }
+
+        return strtoupper((string) $assignment->status) === UserModule::STATUS_LOCKED;
+    }
+
+    private function resolveUserModuleAssignment(User $user, string $moduleId): ?UserModule
+    {
+        if ($user->isAdmin()) {
+            return null;
+        }
+
+        return UserModule::query()
+            ->where('user_id', $user->id)
+            ->where('module_id', $moduleId)
+            ->first();
     }
 
     private function normalizeLessonStatus(string $status, bool $isCompleted, int $percent): string
@@ -612,7 +610,7 @@ class UserModuleController extends Controller
         return 'NOT_STARTED';
     }
 
-    private function getLessonOrFailForUser(string $userId, string $slug, string $lessonId): Lesson
+    private function getLessonOrFailForUser(User $user, string $slug, string $lessonId): Lesson
     {
         $module = Module::query()
             ->where('slug', $slug)
@@ -620,7 +618,7 @@ class UserModuleController extends Controller
             ->where('status', 'active')
             ->firstOrFail();
 
-        $isLocked = $this->isModuleLockedForUser($userId, $module->id);
+        $isLocked = $this->isModuleLockedForUser($user, $module->id);
         if ($isLocked) {
             abort(Response::HTTP_FORBIDDEN, 'Module is locked');
         }

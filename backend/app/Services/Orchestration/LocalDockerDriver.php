@@ -158,6 +158,7 @@ class LocalDockerDriver implements LabDriverInterface
 
         if ($raw !== '' && strlen($raw) <= 65535 && $this->isComposeSafe($raw)) {
             $rendered = str_replace('${PORT}', (string) $assignedPort, $raw);
+            $rendered = $this->enforcePublicPortBinding($rendered, $assignedPort);
             $guarded = $this->injectRuntimeGuards($rendered, $instance, $template);
             if ($guarded !== null) {
                 return $guarded;
@@ -266,7 +267,7 @@ class LocalDockerDriver implements LabDriverInterface
             ."  app:\n"
             ."    image: {$image}\n"
             ."    ports:\n"
-            ."      - \"{$assignedPort}:{$internalPort}\"\n"
+            ."      - \"0.0.0.0:{$assignedPort}:{$internalPort}\"\n"
             ."    labels:\n"
             ."      lab_instance_id: \"{$instance->id}\"\n"
             ."      user_id: \"{$instance->user_id}\"\n"
@@ -304,6 +305,27 @@ class LocalDockerDriver implements LabDriverInterface
         $process->setEnv($env);
 
         return $process;
+    }
+
+    private function enforcePublicPortBinding(string $compose, int $assignedPort): string
+    {
+        $lines = preg_split('/\r\n|\r|\n/', $compose) ?: [];
+        $result = [];
+
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+            $updated = $line;
+
+            if (preg_match('/^-\s*["\']?(127\.0\.0\.1:)?'.preg_quote((string) $assignedPort, '/').':(\d+)["\']?$/', $trimmed, $matches) === 1) {
+                $internalPort = (int) ($matches[2] ?? 80);
+                $indent = (string) preg_replace('/\S.*$/', '', $line);
+                $updated = sprintf('%s- "0.0.0.0:%d:%d"', $indent, $assignedPort, $internalPort);
+            }
+
+            $result[] = $updated;
+        }
+
+        return implode("\n", $result);
     }
 
     private function assertValidPort(int $port): void

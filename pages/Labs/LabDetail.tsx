@@ -104,7 +104,7 @@ const LabDetail: React.FC = () => {
                     <div className="bg-slate-900 rounded p-3 font-mono text-xs text-green-400 mb-4 break-all">
                       target: {instance.gateway || 'n/a'}<br/>
                       port: {instance.assigned_port || '-'}<br/>
-                      url: {instance.connection_url || instance.access_urls?.[0]?.url || '-'}
+                      url: {instance.access_url || instance.connection_url || instance.access_urls?.[0]?.url || '-'}
                     </div>
                     <button 
                       onClick={() => deactivate(instance.instance_id)}

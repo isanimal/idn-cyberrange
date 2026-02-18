@@ -8,6 +8,10 @@ use Symfony\Component\Process\Process;
 
 class OrchestrationPreflightService
 {
+    public function __construct(private readonly PublicLabAccessService $publicAccess)
+    {
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -15,7 +19,8 @@ class OrchestrationPreflightService
     {
         $workdir = $this->checkWorkdir();
         $docker = $this->checkDocker();
-        $ok = $workdir['ok'] && $docker['ok'];
+        $publicEndpoint = $this->checkPublicEndpoint();
+        $ok = $workdir['ok'] && $docker['ok'] && $publicEndpoint['ok'];
 
         return [
             'ok' => $ok,
@@ -23,6 +28,7 @@ class OrchestrationPreflightService
             'checks' => [
                 'workdir' => $workdir,
                 'docker' => $docker,
+                'public_endpoint' => $publicEndpoint,
             ],
         ];
     }
@@ -104,6 +110,47 @@ class OrchestrationPreflightService
         $errorOutput = trim($process->getErrorOutput().' '.$process->getOutput());
         $result['error'] = $errorOutput;
         $result['hints'] = $this->dockerHints($errorOutput, $dockerHost);
+
+        return $result;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function checkPublicEndpoint(): array
+    {
+        $mode = strtolower((string) config('labs.public_port_mode', 'direct'));
+        [$start, $end] = $this->publicAccess->allowedPortBounds();
+        $publicHost = trim((string) config('labs.public_host', ''));
+        $baseUrl = trim((string) config('labs.public_base_url', ''));
+
+        $result = [
+            'ok' => true,
+            'mode' => $mode,
+            'allowed_port_range' => "{$start}-{$end}",
+            'message' => 'Public endpoint configuration is valid.',
+            'hints' => [
+                "Ensure firewall/security-group allows inbound TCP {$start}:{$end} for direct mode.",
+                'For UFW: sudo ufw allow '.$start.':'.$end.'/tcp',
+            ],
+        ];
+
+        if (! in_array($mode, ['direct', 'proxy'], true)) {
+            $result['ok'] = false;
+            $result['message'] = "Invalid CYBERRANGE_PUBLIC_PORT_MODE '{$mode}'. Use direct or proxy.";
+            return $result;
+        }
+
+        if ($mode === 'proxy' && $baseUrl === '') {
+            $result['ok'] = false;
+            $result['message'] = 'CYBERRANGE_PUBLIC_BASE_URL is required in proxy mode.';
+            $result['hints'][] = 'Set CYBERRANGE_PUBLIC_BASE_URL=https://labs.example.com.';
+        }
+
+        if ($mode === 'direct' && $publicHost === '') {
+            $result['message'] = 'CYBERRANGE_PUBLIC_HOST not set; backend will fallback to request/app host.';
+            $result['hints'][] = 'Set CYBERRANGE_PUBLIC_HOST to a routable IP or DNS name for consistent external URLs.';
+        }
 
         return $result;
     }

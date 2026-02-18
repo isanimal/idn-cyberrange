@@ -42,6 +42,7 @@ interface PreflightPayload {
     checks: {
       workdir: { ok: boolean; message: string; error?: string; hints?: string[] };
       docker: { ok: boolean; message: string; error?: string; hints?: string[] };
+      public_endpoint?: { ok: boolean; message: string; error?: string; hints?: string[] };
     };
   };
 }
@@ -83,6 +84,7 @@ const Orchestration: React.FC = () => {
         const hints = [
           ...(preflight.data.checks.workdir.hints ?? []),
           ...(preflight.data.checks.docker.hints ?? []),
+          ...(preflight.data.checks.public_endpoint?.hints ?? []),
         ];
         setPreflightWarnings(preflight.data.ok ? [] : Array.from(new Set(hints)));
       } catch (preflightError) {

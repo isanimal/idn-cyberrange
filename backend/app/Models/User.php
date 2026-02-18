@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Enums\UserStatus;
 use App\Models\Concerns\UsesUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -58,5 +59,17 @@ class User extends Authenticatable
     public function taskProgress(): HasMany
     {
         return $this->hasMany(UserTaskProgress::class);
+    }
+
+    public function moduleAssignments(): HasMany
+    {
+        return $this->hasMany(UserModule::class);
+    }
+
+    public function assignedModules(): BelongsToMany
+    {
+        return $this->belongsToMany(Module::class, 'user_modules')
+            ->withPivot(['id', 'status', 'assigned_at', 'due_at'])
+            ->withTimestamps();
     }
 }

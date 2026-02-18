@@ -1,5 +1,5 @@
 import { apiClient } from '../../../services/apiClient';
-import { LabDetailResponse, LabInstance, LabTemplate } from '../types';
+import { DeleteLabResponse, LabDetailResponse, LabInstance, LabTemplate } from '../types';
 
 interface ListLabsResponse {
   data: LabTemplate[];
@@ -100,8 +100,8 @@ export const labService = {
     await apiClient.post<LabTemplate>(`/api/v1/admin/labs/${id}/archive`);
   },
 
-  deleteLab: async (id: string): Promise<void> => {
-    await apiClient.delete<void>(`/api/v1/admin/labs/${id}`);
+  deleteLab: async (id: string): Promise<DeleteLabResponse> => {
+    return apiClient.delete<DeleteLabResponse>(`/api/v1/admin/labs/${id}`);
   },
 };
 

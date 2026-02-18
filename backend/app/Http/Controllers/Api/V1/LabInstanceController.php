@@ -37,7 +37,7 @@ class LabInstanceController extends Controller
             $validated['module_id'] ?? null
         );
 
-        return response()->json(['data' => new LabInstanceResource($instance->load('template'))], 201);
+        return response()->json(['data' => new LabInstanceResource($instance->load(['template', 'runtime']))], 201);
     }
 
     public function activate(ActivateLabRequest $request, string $id): JsonResponse
@@ -49,7 +49,7 @@ class LabInstanceController extends Controller
             $request->validated('module_id')
         );
 
-        return response()->json(new LabInstanceResource($instance->load('template')), 201);
+        return response()->json(new LabInstanceResource($instance->load(['template', 'runtime'])), 201);
     }
 
     public function start(ActivateLabRequest $request, string $id): JsonResponse
@@ -61,14 +61,14 @@ class LabInstanceController extends Controller
     {
         $instance = $this->instances->deactivate($instance_id, $request->user());
 
-        return response()->json(new LabInstanceResource($instance->load('template')));
+        return response()->json(new LabInstanceResource($instance->load(['template', 'runtime'])));
     }
 
     public function restart(Request $request, string $instance_id): JsonResponse
     {
         $instance = $this->instances->restart($instance_id, $request->user());
 
-        return response()->json(new LabInstanceResource($instance->load('template')));
+        return response()->json(new LabInstanceResource($instance->load(['template', 'runtime'])));
     }
 
     public function stop(Request $request, string $instance_id): JsonResponse
@@ -92,7 +92,7 @@ class LabInstanceController extends Controller
     {
         $instance = $this->instances->updateInstance($instance_id, $request->user(), $request->validated());
 
-        return response()->json(new LabInstanceResource($instance->load('template')));
+        return response()->json(new LabInstanceResource($instance->load(['template', 'runtime'])));
     }
 
     public function upgrade(UpgradeLabInstanceRequest $request, string $instance_id): JsonResponse
@@ -117,7 +117,7 @@ class LabInstanceController extends Controller
         $result = $this->instances->myInstances($request->user(), [
             'state' => $request->query('state'),
         ], (int) $request->integer('limit', 15));
-        $items = collect($result->items())->each(fn ($instance) => $instance->load('template'));
+        $items = collect($result->items())->each(fn ($instance) => $instance->load(['template', 'runtime']));
 
         return response()->json([
             'data' => LabInstanceResource::collection($items),
@@ -134,7 +134,7 @@ class LabInstanceController extends Controller
         $result = $this->instances->myInstances($request->user(), [
             'state' => $request->query('state'),
         ], (int) $request->integer('limit', 20));
-        $items = collect($result->items())->each(fn ($instance) => $instance->load('template'));
+        $items = collect($result->items())->each(fn ($instance) => $instance->load(['template', 'runtime']));
 
         return response()->json([
             'data' => LabInstanceResource::collection($items),
@@ -155,7 +155,7 @@ class LabInstanceController extends Controller
     {
         $instance = $this->instances->findInstanceForUserOrFail($instance_id, $request->user());
 
-        return response()->json(['data' => new LabInstanceResource($instance->load('template'))]);
+        return response()->json(['data' => new LabInstanceResource($instance->load(['template', 'runtime']))]);
     }
 
     public function showForLabsNamespace(Request $request, string $instance_id): JsonResponse

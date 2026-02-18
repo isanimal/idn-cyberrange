@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\LabTemplateStatus;
+use App\Models\LabInstance;
 use App\Models\LabTemplate;
 use App\Models\User;
 use App\Services\Orchestration\LabOrchestratorService;
@@ -87,5 +88,88 @@ class LabInstanceApiTest extends TestCase
             ->assertJsonPath('details.operation', 'start')
             ->assertJsonPath('details.preflight.ok', false)
             ->assertJsonPath('details.hints.0', 'Container mode: mount /var/run/docker.sock and /var/lib/idn-cyberrange into backend container.');
+
+        $instance = LabInstance::query()->where('user_id', $user->id)->firstOrFail();
+        $this->assertDatabaseMissing('port_allocations', [
+            'lab_instance_id' => $instance->id,
+            'status' => 'ASSIGNED',
+        ]);
+    }
+
+    public function test_repeated_start_for_same_user_and_lab_returns_conflict_without_creating_new_instance(): void
+    {
+        $user = User::factory()->create();
+        $template = LabTemplate::factory()->create([
+            'status' => LabTemplateStatus::PUBLISHED,
+            'docker_image' => 'nginx:alpine',
+            'internal_port' => 80,
+        ]);
+
+        $first = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/labs/'.$template->id.'/start')
+            ->assertStatus(201);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/labs/'.$template->id.'/start')
+            ->assertStatus(409);
+
+        $assignedPort = (int) $first->json('assigned_port');
+
+        $this->assertSame(1, LabInstance::query()
+            ->where('user_id', $user->id)
+            ->where('lab_template_id', $template->id)
+            ->count());
+
+        $this->assertDatabaseHas('port_allocations', [
+            'port' => $assignedPort,
+            'active_port' => $assignedPort,
+            'lab_instance_id' => $first->json('instance_id'),
+            'status' => 'ASSIGNED',
+        ]);
+    }
+
+    public function test_start_returns_public_access_url_in_direct_mode(): void
+    {
+        config()->set('labs.public_port_mode', 'direct');
+        config()->set('labs.public_host', '172.23.2.32');
+        config()->set('labs.public_scheme', 'http');
+
+        $user = User::factory()->create();
+        $template = LabTemplate::factory()->create([
+            'status' => LabTemplateStatus::PUBLISHED,
+            'docker_image' => 'nginx:alpine',
+            'internal_port' => 80,
+        ]);
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/labs/'.$template->id.'/start')
+            ->assertStatus(201);
+
+        $assignedPort = (int) $response->json('assigned_port');
+        $this->assertSame("http://172.23.2.32:{$assignedPort}", $response->json('access_url'));
+        $this->assertSame("http://172.23.2.32:{$assignedPort}", $response->json('connection_url'));
+        $this->assertSame($assignedPort, (int) $response->json('host_port'));
+    }
+
+    public function test_start_returns_proxy_access_url_in_proxy_mode(): void
+    {
+        config()->set('labs.public_port_mode', 'proxy');
+        config()->set('labs.public_base_url', 'https://labs.example.com');
+        config()->set('labs.public_proxy_path_prefix', '/lab');
+
+        $user = User::factory()->create();
+        $template = LabTemplate::factory()->create([
+            'status' => LabTemplateStatus::PUBLISHED,
+            'docker_image' => 'nginx:alpine',
+            'internal_port' => 80,
+        ]);
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/labs/'.$template->id.'/start')
+            ->assertStatus(201);
+
+        $instanceId = $response->json('instance_id');
+        $this->assertSame("https://labs.example.com/lab/{$instanceId}/", $response->json('access_url'));
+        $this->assertSame("https://labs.example.com/lab/{$instanceId}/", $response->json('connection_url'));
     }
 }

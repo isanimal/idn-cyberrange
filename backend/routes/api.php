@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\Admin\AdminOrchestrationController;
 use App\Http\Controllers\Api\V1\Admin\AdminUserController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ChallengeController;
+use App\Http\Controllers\Api\V1\DashboardController as UserDashboardController;
 use App\Http\Controllers\Api\V1\LabController;
 use App\Http\Controllers\Api\V1\LabInstanceController;
 use App\Http\Controllers\Api\V1\UserModuleController;
@@ -22,6 +23,7 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
         Route::middleware('user.active')->group(function (): void {
+            Route::get('/dashboard', [UserDashboardController::class, 'show']);
             Route::get('/modules', [UserModuleController::class, 'index']);
             Route::get('/modules/{slug}', [UserModuleController::class, 'show']);
             Route::get('/modules/{slug}/labs', [UserModuleController::class, 'labs']);
@@ -88,6 +90,9 @@ Route::prefix('v1')->group(function (): void {
             Route::patch('/users/{id}/unsuspend', [AdminUserController::class, 'unsuspend']);
             Route::delete('/users/{id}', [AdminUserController::class, 'destroy']);
             Route::post('/users/{id}/restore', [AdminUserController::class, 'restore']);
+            Route::get('/users/{id}/modules', [AdminUserController::class, 'modules']);
+            Route::post('/users/{id}/modules', [AdminUserController::class, 'assignModules']);
+            Route::delete('/users/{id}/modules/{moduleId}', [AdminUserController::class, 'unassignModule']);
 
             Route::get('/modules', [AdminModuleController::class, 'index']);
             Route::post('/modules', [AdminModuleController::class, 'store']);

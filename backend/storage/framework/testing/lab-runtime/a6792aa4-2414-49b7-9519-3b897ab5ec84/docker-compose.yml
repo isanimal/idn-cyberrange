@@ -1,0 +1,28 @@
+services:
+  app:
+    labels:
+      lab_instance_id: "a6792aa4-2414-49b7-9519-3b897ab5ec84"
+      user_id: "dac66e38-cb05-4975-9b98-91e18d9431c9"
+      lab_template_id: "94cd2db8-f3d4-497c-9595-9031da83fe8f"
+    environment:
+      APP_ENV: "training"
+      LAB_INSTANCE_ID: "a6792aa4-2414-49b7-9519-3b897ab5ec84"
+      LAB_TEMPLATE_ID: "94cd2db8-f3d4-497c-9595-9031da83fe8f"
+      LAB_USER_ID: "dac66e38-cb05-4975-9b98-91e18d9431c9"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - lab_a6792aa4-2414-49b7-9519-3b897ab5ec84
+    deploy:
+      resources:
+        limits:
+          memory: "256m"
+          cpus: "0.5"
+    image: nginx:alpine
+    ports:
+      - "0.0.0.0:21050:80"

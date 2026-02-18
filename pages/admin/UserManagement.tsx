@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import Card from '../../components/UI/Card';
-import { UserRole, UserStatus } from '../../types';
-import { RotateCcw, Shield, User, UserPlus, UserX, X, Trash2, UserCheck } from 'lucide-react';
+import { AdminAssignedModuleItem, AdminUserModuleOption, UserRole, UserStatus } from '../../types';
+import { RotateCcw, Shield, User, UserPlus, UserX, X, Trash2, UserCheck, BookOpen, Search } from 'lucide-react';
+import { adminUserModulesApi } from '../../services/adminUserModulesApi';
 
 interface PaginationMeta {
   current_page: number;
@@ -38,6 +39,12 @@ const UserManagement: React.FC = () => {
     password: '',
     role: UserRole.USER
   });
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [assignedModules, setAssignedModules] = useState<AdminAssignedModuleItem[]>([]);
+  const [availableModules, setAvailableModules] = useState<AdminUserModuleOption[]>([]);
+  const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>([]);
+  const [moduleSearch, setModuleSearch] = useState('');
 
   const loadUsers = async (targetPage = page, withDeleted = includeDeleted) => {
     setIsLoading(true);
@@ -145,6 +152,75 @@ const UserManagement: React.FC = () => {
     }
   };
 
+  const openAssignModal = async (target: { id: string; name: string; email: string }) => {
+    setError('');
+    setIsSubmitting(true);
+    setSelectedUser(target);
+    setShowAssignModal(true);
+    setSelectedModuleIds([]);
+    setModuleSearch('');
+    try {
+      const data = await adminUserModulesApi.list(target.id);
+      setAssignedModules(data.assigned);
+      setAvailableModules(data.available);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load module assignments.');
+      setShowAssignModal(false);
+      setSelectedUser(null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAssignModules = async () => {
+    if (!selectedUser || selectedModuleIds.length === 0) {
+      return;
+    }
+
+    setError('');
+    setIsSubmitting(true);
+    try {
+      const data = await adminUserModulesApi.assign(selectedUser.id, selectedModuleIds);
+      setAssignedModules(data.assigned);
+      setAvailableModules(data.available);
+      setSelectedModuleIds([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to assign modules.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUnassignModule = async (moduleId: string) => {
+    if (!selectedUser) {
+      return;
+    }
+
+    setError('');
+    setIsSubmitting(true);
+    try {
+      await adminUserModulesApi.unassign(selectedUser.id, moduleId);
+      const data = await adminUserModulesApi.list(selectedUser.id);
+      setAssignedModules(data.assigned);
+      setAvailableModules(data.available);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to unassign module.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const filteredAvailableModules = availableModules.filter((module) => {
+    const query = moduleSearch.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+
+    return module.title.toLowerCase().includes(query) ||
+      module.slug.toLowerCase().includes(query) ||
+      (module.description ?? '').toLowerCase().includes(query);
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -235,6 +311,14 @@ const UserManagement: React.FC = () => {
                     {u.id !== currentUser?.id && (
                       <div className="flex justify-end items-center gap-1">
                         <button
+                          onClick={() => void openAssignModal({ id: u.id, name: u.name, email: u.email })}
+                          disabled={isSubmitting}
+                          className="p-2 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 text-slate-400 hover:text-blue-500 transition-colors"
+                          title="Assign Modules"
+                        >
+                          <BookOpen size={18} />
+                        </button>
+                        <button
                           onClick={() => void handleResetAttempts(u.id)}
                           disabled={isSubmitting}
                           className="p-2 rounded hover:bg-amber-50 dark:hover:bg-amber-900/20 text-slate-400 hover:text-amber-500 transition-colors"
@@ -316,6 +400,104 @@ const UserManagement: React.FC = () => {
           </div>
         )}
       </Card>
+
+      {showAssignModal && selectedUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl w-full max-w-3xl shadow-2xl transition-colors">
+            <div className="flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-700">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Assign Modules</h3>
+                <p className="text-xs text-slate-500 mt-1">{selectedUser.name} ({selectedUser.email})</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowAssignModal(false);
+                  setSelectedUser(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Assigned Modules</h4>
+                <div className="border border-slate-200 dark:border-slate-700 rounded-lg max-h-72 overflow-auto">
+                  {assignedModules.length === 0 ? (
+                    <div className="p-4 text-sm text-slate-500">No modules assigned.</div>
+                  ) : (
+                    assignedModules.map((assignment) => (
+                      <div key={assignment.assignment_id} className="p-3 border-b border-slate-100 dark:border-slate-700 last:border-b-0 flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-medium text-slate-800 dark:text-white text-sm">{assignment.module.title}</div>
+                          <div className="text-xs text-slate-500">{assignment.module.slug} • {assignment.status}</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleUnassignModule(assignment.module_id)}
+                          disabled={isSubmitting}
+                          className="px-2 py-1 text-xs font-semibold rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          Unassign
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Available Modules</h4>
+                <div className="relative">
+                  <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={moduleSearch}
+                    onChange={(e) => setModuleSearch(e.target.value)}
+                    placeholder="Search modules..."
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-2 pl-9 pr-3 text-sm outline-none focus:border-idn-500"
+                  />
+                </div>
+                <div className="border border-slate-200 dark:border-slate-700 rounded-lg max-h-72 overflow-auto">
+                  {filteredAvailableModules.length === 0 ? (
+                    <div className="p-4 text-sm text-slate-500">No available modules.</div>
+                  ) : (
+                    filteredAvailableModules.map((module) => (
+                      <label key={module.id} className="p-3 border-b border-slate-100 dark:border-slate-700 last:border-b-0 flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedModuleIds.includes(module.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedModuleIds((prev) => [...prev, module.id]);
+                              return;
+                            }
+                            setSelectedModuleIds((prev) => prev.filter((id) => id !== module.id));
+                          }}
+                          className="mt-1"
+                        />
+                        <div>
+                          <div className="font-medium text-slate-800 dark:text-white text-sm">{module.title}</div>
+                          <div className="text-xs text-slate-500">{module.slug}</div>
+                        </div>
+                      </label>
+                    ))
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleAssignModules()}
+                  disabled={isSubmitting || selectedModuleIds.length === 0}
+                  className="w-full bg-idn-500 text-white font-semibold py-2.5 rounded-lg hover:bg-idn-600 disabled:opacity-60"
+                >
+                  {isSubmitting ? 'Saving...' : `Assign Selected (${selectedModuleIds.length})`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Registration Modal */}
       {showModal && (

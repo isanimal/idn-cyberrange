@@ -4,10 +4,12 @@ namespace App\Services\Lab;
 
 use App\Enums\LabTemplateStatus;
 use App\Models\LabTemplate;
+use App\Models\ModuleLabTemplate;
 use App\Repositories\Contracts\LabTemplateRepositoryInterface;
 use App\Services\Audit\AuditLogService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -151,8 +153,18 @@ class LabTemplateService
 
     public function delete(LabTemplate $template, string $actorId): void
     {
-        $this->templates->delete($template);
-        $this->audit->log('ADMIN_LAB_DELETED', $actorId, 'LabTemplate', $template->id);
+        DB::transaction(function () use ($template): void {
+            ModuleLabTemplate::query()
+                ->where('lab_template_id', $template->id)
+                ->delete();
+
+            $template->delete();
+        });
+
+        $this->audit->log('ADMIN_LAB_DELETED', $actorId, 'LabTemplate', $template->id, [
+            'template_family_uuid' => $template->template_family_uuid,
+            'soft_deleted' => true,
+        ]);
     }
 
     private function normalizePayload(array $data): array

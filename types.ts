@@ -107,6 +107,7 @@ export interface ModuleSummary {
   lessons_count: number;
   progress_percent: number;
   is_locked: boolean;
+  assignment_status?: 'ASSIGNED' | 'ACTIVE' | 'LOCKED';
   locked_reason?: string | null;
   completed_at?: string | null;
 }
@@ -242,4 +243,57 @@ export interface AdminOverviewData {
 
 export interface AdminOverviewResponse {
   data: AdminOverviewData;
+}
+
+export interface DashboardAssignedModule {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  difficulty: UserModuleLevel;
+  status: 'ASSIGNED' | 'ACTIVE' | 'LOCKED';
+  is_locked: boolean;
+  lessons_count: number;
+  progress_percent: number;
+  last_accessed_at?: string | null;
+  last_lesson_id?: string | null;
+  completed_at?: string | null;
+  assigned_at?: string | null;
+  due_at?: string | null;
+}
+
+export interface DashboardActivityItem {
+  type: 'submission';
+  id: string;
+  challenge_id: string;
+  challenge_title?: string | null;
+  result: 'CORRECT' | 'WRONG' | string;
+  attempt_no: number;
+  submitted_at?: string | null;
+}
+
+export interface DashboardData {
+  total_points: number;
+  active_labs_count: number;
+  global_rank: number | null;
+  assigned_modules: DashboardAssignedModule[];
+  last_accessed_module?: DashboardAssignedModule | null;
+  recent_activity: DashboardActivityItem[];
+}
+
+export interface AdminUserModuleOption {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  difficulty: UserModuleLevel;
+}
+
+export interface AdminAssignedModuleItem {
+  assignment_id: string;
+  module_id: string;
+  status: 'ASSIGNED' | 'ACTIVE' | 'LOCKED';
+  assigned_at?: string | null;
+  due_at?: string | null;
+  module: AdminUserModuleOption;
 }

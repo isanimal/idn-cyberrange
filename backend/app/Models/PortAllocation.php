@@ -14,6 +14,7 @@ class PortAllocation extends Model
 
     protected $fillable = [
         'port',
+        'active_port',
         'lab_instance_id',
         'status',
         'allocated_at',
@@ -23,6 +24,7 @@ class PortAllocation extends Model
     protected function casts(): array
     {
         return [
+            'active_port' => 'integer',
             'allocated_at' => 'datetime',
             'released_at' => 'datetime',
         ];

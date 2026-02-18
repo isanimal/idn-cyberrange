@@ -39,6 +39,20 @@ type RequestOptions = Omit<RequestInit, 'headers' | 'body'> & {
   headers?: Record<string, string>;
 };
 
+export class ApiRequestError extends Error {
+  status: number;
+  details?: unknown;
+  payload?: unknown;
+
+  constructor(message: string, status: number, details?: unknown, payload?: unknown) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.details = details;
+    this.payload = payload;
+  }
+}
+
 const isFormDataBody = (body: unknown): body is FormData =>
   typeof FormData !== 'undefined' && body instanceof FormData;
 
@@ -70,19 +84,24 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
+    let details: unknown;
+    let payload: unknown;
 
     try {
-      const payload = await response.json();
-      const hints = Array.isArray(payload?.details?.hints)
-        ? payload.details.hints.filter((value: unknown): value is string => typeof value === 'string' && value.trim() !== '')
+      payload = await response.json();
+      const parsed = payload as { message?: string; error?: string; details?: unknown };
+      details = parsed?.details;
+      const parsedDetails = parsed?.details as { hints?: unknown } | undefined;
+      const hints = Array.isArray(parsedDetails?.hints)
+        ? parsedDetails.hints.filter((value: unknown): value is string => typeof value === 'string' && value.trim() !== '')
         : [];
-      const baseMessage = payload?.message ?? payload?.error ?? message;
+      const baseMessage = parsed?.message ?? parsed?.error ?? message;
       message = hints.length > 0 ? `${baseMessage} Suggested fix: ${hints[0]}` : baseMessage;
     } catch {
       // ignore json parse errors for non-json responses
     }
 
-    throw new Error(message);
+    throw new ApiRequestError(message, response.status, details, payload);
   }
 
   if (response.status === 204) {
