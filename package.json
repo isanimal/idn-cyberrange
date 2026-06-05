@@ -1,31 +1,17 @@
 {
-  "name": "idn-cyberrange",
+  "name": "backend-compana",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "dev": "vercel dev",
+    "build": "echo \"Backend-Compana uses Vercel Serverless Functions\"",
+    "test": "echo \"No automated tests yet\""
   },
-  "dependencies": {
-    "lucide-react": "^0.564.0",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "recharts": "^3.7.0",
-    "react-router-dom": "^7.13.0",
-    "react-markdown": "^10.1.0"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "@testing-library/jest-dom": "^6.6.3",
-    "@testing-library/react": "^16.1.0",
     "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "jsdom": "^25.0.1",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0",
-    "vitest": "^2.1.8"
+    "vercel": "^39.0.0"
   }
 }
